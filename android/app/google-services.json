@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "197130851193",
+    "project_id": "wayora-75800",
+    "storage_bucket": "wayora-75800.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:197130851193:android:4307fa9f55698d0f0355a8",
+        "android_client_info": {
+          "package_name": "ru.wayora.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDY9SBB8_Tuc4UbQcZ2RV0cZP_P5wCZ5sM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

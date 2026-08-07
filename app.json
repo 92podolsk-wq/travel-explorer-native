@@ -1,0 +1,67 @@
+{
+  "expo": {
+    "name": "Wayora",
+    "slug": "wayora-native",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#F7F4EE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "ru.wayora.app",
+      "googleServicesFile": "./google-services.json"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "@maplibre/maplibre-react-native",
+      "expo-notifications",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Wayora использует ваше местоположение, чтобы уведомлять о избранных локациях поблизости.",
+          "isAndroidBackgroundLocationEnabled": true
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#F7F4EE"
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "TripCountdown",
+              "label": "Дни до поездки",
+              "description": "Обратный отсчёт до начала маршрута",
+              "minWidth": "250dp",
+              "minHeight": "120dp",
+              "targetCellWidth": 3,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal|vertical",
+              "updatePeriodMillis": 1800000
+            }
+          ]
+        }
+      ]
+    ]
+  }
+}
