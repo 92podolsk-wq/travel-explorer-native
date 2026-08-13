@@ -61,7 +61,9 @@
             }
           ]
         }
-      ]
+      ],
+      "expo-image",
+      "expo-font"
     ]
   }
 }

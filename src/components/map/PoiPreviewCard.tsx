@@ -1,11 +1,14 @@
 import { useMemo } from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { Text } from "@/shared/ui/AppText";
+import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
+import { Gesture, GestureDetector, Pressable } from "react-native-gesture-handler";
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import type { Poi } from "@/entities/poi/model/types";
 import type { Category } from "@/entities/category/model/types";
 import type { Language } from "@/shared/i18n/types";
 import { useTranslations } from "@/shared/i18n/useTranslations";
-import { CategoryIcon } from "@/components/CategoryIcon";
 import { useTheme } from "@/shared/theme/useTheme";
 import type { ThemeColors } from "@/shared/theme/colors";
 import { resolveOfflinePhotoUri } from "@/shared/map/offline-maps";
@@ -20,6 +23,9 @@ type PoiPreviewCardProps = {
   onClose: () => void;
   onToggleFavorite: () => void;
 };
+
+const DISMISS_DISTANCE = 120;
+const DISMISS_THRESHOLD = 50;
 
 export function PoiPreviewCard({
   poi,
@@ -38,33 +44,71 @@ export function PoiPreviewCard({
   const name = poi.nameByLanguage?.[language] ?? poi.name;
   const categoryName = category ? (category.nameByLanguage[language] ?? category.name) : null;
 
-  return (
-    <View style={styles.card}>
-      <View style={styles.photoWrap}>
-        {poi.photos[0] ? (
-          <Image source={{ uri: resolveOfflinePhotoUri(poi.photos[0].id, poi.photos[0].url) }} style={styles.photo} />
-        ) : (
-          <View style={[styles.photo, styles.photoFallback]} />
-        )}
-        <TouchableOpacity style={styles.closeButton} onPress={onClose} hitSlop={8}>
-          <Ionicons name="close" size={16} color="#ffffff" />
-        </TouchableOpacity>
-      </View>
+  const translateY = useSharedValue(0);
 
-      <View style={styles.body}>
-        <Text style={styles.name} numberOfLines={1}>
-          {name}
-        </Text>
-        <Text style={styles.subtitle} numberOfLines={1}>
-          {regionName}
-          {categoryName ? ` · ${categoryName}` : ""}
-        </Text>
+  // Dismisses on a swipe in either direction. Buttons below use RNGH's own
+  // Pressable (not React Native's core Touchable/Pressable) — mixing the old
+  // responder-based touchables with a sibling GestureDetector on the same
+  // surface let this Pan gesture's native recognizer swallow taps before
+  // they reached the button, so every tap target here needs to speak RNGH.
+  const panGesture = Gesture.Pan()
+    .activeOffsetY([-10, 10])
+    .failOffsetX([-12, 12])
+    .onUpdate((event) => {
+      translateY.value = event.translationY;
+    })
+    .onEnd((event) => {
+      const pastThreshold = Math.abs(translateY.value) > DISMISS_THRESHOLD || Math.abs(event.velocityY) > 800;
+      if (pastThreshold) {
+        const direction = translateY.value < 0 ? -1 : 1;
+        translateY.value = withTiming(direction * DISMISS_DISTANCE, { duration: 180 }, (finished) => {
+          if (finished) runOnJS(onClose)();
+        });
+      } else {
+        translateY.value = withTiming(0, { duration: 150 });
+      }
+    });
+
+  const cardAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+    opacity: 1 - Math.min(1, Math.abs(translateY.value) / DISMISS_DISTANCE) * 0.6
+  }));
+
+  return (
+    <GestureDetector gesture={panGesture}>
+      <Animated.View style={[styles.card, cardAnimatedStyle]}>
+        <Pressable onPress={onView}>
+          <View style={styles.photoWrap}>
+            {poi.photos[0] ? (
+              <Image
+                source={{ uri: resolveOfflinePhotoUri(poi.photos[0].id, poi.photos[0].url) }}
+                style={styles.photo}
+                contentFit="cover"
+              />
+            ) : (
+              <View style={[styles.photo, styles.photoFallback]} />
+            )}
+            <Pressable style={styles.closeButton} onPress={onClose} hitSlop={8}>
+              <Ionicons name="close" size={16} color="#ffffff" />
+            </Pressable>
+          </View>
+
+          <View style={styles.textBody}>
+            <Text style={styles.name} numberOfLines={1}>
+              {name}
+            </Text>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {regionName}
+              {categoryName ? ` · ${categoryName}` : ""}
+            </Text>
+          </View>
+        </Pressable>
 
         <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.viewButton} onPress={onView}>
+          <Pressable style={styles.viewButton} onPress={onView}>
             <Text style={styles.viewButtonLabel}>{t.app.poiPreviewView}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
+          </Pressable>
+          <Pressable
             style={[styles.favoriteButton, isFavorite && { backgroundColor: colors.primary }]}
             onPress={onToggleFavorite}
           >
@@ -73,10 +117,10 @@ export function PoiPreviewCard({
               size={18}
               color={isFavorite ? colors.textInverse : colors.primary}
             />
-          </TouchableOpacity>
+          </Pressable>
         </View>
-      </View>
-    </View>
+      </Animated.View>
+    </GestureDetector>
   );
 }
 
@@ -95,7 +139,7 @@ function createStyles(colors: ThemeColors) {
       elevation: 6
     },
     photoWrap: { height: 110, backgroundColor: colors.surfaceAlt },
-    photo: { width: "100%", height: "100%", resizeMode: "cover" },
+    photo: { width: "100%", height: "100%" },
     photoFallback: { backgroundColor: colors.surfaceAlt },
     closeButton: {
       position: "absolute",
@@ -108,10 +152,10 @@ function createStyles(colors: ThemeColors) {
       justifyContent: "center",
       backgroundColor: "rgba(0,0,0,0.4)"
     },
-    body: { padding: 12 },
+    textBody: { paddingHorizontal: 12, paddingTop: 12 },
     name: { fontSize: 15, fontWeight: "800", color: colors.textPrimary },
     subtitle: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-    actionsRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
+    actionsRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingBottom: 12, marginTop: 10 },
     viewButton: {
       flex: 1,
       backgroundColor: colors.primary,

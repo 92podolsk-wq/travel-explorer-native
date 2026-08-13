@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { Text } from "@/shared/ui/AppText";
 import { Ionicons } from "@expo/vector-icons";
 import type { Season } from "@/entities/poi/model/types";
 import type { SeasonWindows } from "@/entities/region/model/types";

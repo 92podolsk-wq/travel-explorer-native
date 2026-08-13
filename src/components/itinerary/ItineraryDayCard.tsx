@@ -1,7 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Switch, TouchableOpacity, View } from "react-native";
+import { Text } from "@/shared/ui/AppText";
+import { TextInput } from "@/shared/ui/AppTextInput";
 import { NestableDraggableFlatList } from "react-native-draggable-flatlist";
+import { AnimatedCenterModal } from "@/components/AnimatedModal";
 import type { ItineraryDayInfo, ItineraryStopWithPoi } from "@/entities/itinerary/model/types";
 import { stopPointCoordinates } from "@/entities/itinerary/model/stop-point";
 import { buildDayTimeline, formatDurationLabel, formatMinutesAsTime, type DayTimelineEntry } from "@/entities/itinerary/model/timeline";
@@ -230,28 +233,29 @@ export function ItineraryDayCard({
         </View>
       ) : null}
 
-      <Modal visible={movingStopId != null} transparent animationType="fade" onRequestClose={() => setMovingStopId(null)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setMovingStopId(null)}>
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.modalTitle}>{t.auth.moveToDay}</Text>
-            {allDayNumbers.map((dayNumber) => (
-              <TouchableOpacity
-                key={dayNumber}
-                style={styles.modalRow}
-                disabled={dayNumber === day.day}
-                onPress={() => {
-                  if (movingStopId) onMoveStop(movingStopId, dayNumber);
-                  setMovingStopId(null);
-                }}
-              >
-                <Text style={[styles.modalRowLabel, dayNumber === day.day && styles.modalRowLabelDisabled]}>
-                  {t.auth.dayLabel.replace("{n}", String(dayNumber))}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <AnimatedCenterModal
+        visible={movingStopId != null}
+        onClose={() => setMovingStopId(null)}
+        backdropColor={colors.overlay}
+        contentStyle={styles.modalCard}
+      >
+        <Text style={styles.modalTitle}>{t.auth.moveToDay}</Text>
+        {allDayNumbers.map((dayNumber) => (
+          <TouchableOpacity
+            key={dayNumber}
+            style={styles.modalRow}
+            disabled={dayNumber === day.day}
+            onPress={() => {
+              if (movingStopId) onMoveStop(movingStopId, dayNumber);
+              setMovingStopId(null);
+            }}
+          >
+            <Text style={[styles.modalRowLabel, dayNumber === day.day && styles.modalRowLabelDisabled]}>
+              {t.auth.dayLabel.replace("{n}", String(dayNumber))}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </AnimatedCenterModal>
     </View>
   );
 }
@@ -279,7 +283,6 @@ function createStyles(colors: ThemeColors) {
     startValue: { fontSize: 13, fontWeight: "700", color: colors.textPrimary, minWidth: 42, textAlign: "center" },
     lunchRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 8 },
     lunchDetail: { fontSize: 11, color: "#a87a2e" },
-    modalBackdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: "center", padding: 24 },
     modalCard: { backgroundColor: colors.surface, borderRadius: 16, padding: 16 },
     modalTitle: { fontSize: 16, fontWeight: "700", marginBottom: 8, color: colors.textPrimary },
     modalRow: { paddingVertical: 12, paddingHorizontal: 8, borderRadius: 10 },

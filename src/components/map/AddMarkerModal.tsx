@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Text } from "@/shared/ui/AppText";
+import { TextInput } from "@/shared/ui/AppTextInput";
 import { customMarkerColors } from "@/entities/custom-marker/model/types";
 import { useTranslations } from "@/shared/i18n/useTranslations";
+import { AnimatedCenterModal } from "@/components/AnimatedModal";
 import { useTheme } from "@/shared/theme/useTheme";
 import type { ThemeColors } from "@/shared/theme/colors";
 
@@ -49,9 +52,7 @@ export function AddMarkerModal({ visible, markerCount, markerLimit, onSave, onCa
   }
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleCancel}>
-      <Pressable style={styles.backdrop} onPress={handleCancel}>
-        <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
+    <AnimatedCenterModal visible={visible} onClose={handleCancel} backdropColor={colors.overlay} contentStyle={styles.card}>
           <Text style={styles.title}>{t.app.newMarkerTitle}</Text>
 
           <View style={styles.colorRow}>
@@ -86,15 +87,12 @@ export function AddMarkerModal({ visible, markerCount, markerLimit, onSave, onCa
               {isSaving ? <ActivityIndicator color={colors.textInverse} size="small" /> : <Text style={styles.saveLabel}>{t.app.markerSave}</Text>}
             </TouchableOpacity>
           </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </AnimatedCenterModal>
   );
 }
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: "center", padding: 24 },
     card: { backgroundColor: colors.surface, borderRadius: 16, padding: 18 },
     title: { fontSize: 16, fontWeight: "700", color: colors.textPrimary, marginBottom: 12 },
     colorRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 12 },

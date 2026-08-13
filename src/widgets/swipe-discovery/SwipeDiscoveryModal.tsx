@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Image, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Modal, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Text } from "@/shared/ui/AppText";
+import { Image } from "expo-image";
 import { GestureDetector, Gesture, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, {
   interpolate,
@@ -119,7 +121,11 @@ function SwipeCard({
       <Animated.View style={[styles.card, cardStyle]}>
         <View style={styles.photoWrap}>
           {poi.photos[0] ? (
-            <Image source={{ uri: resolveOfflinePhotoUri(poi.photos[0].id, poi.photos[0].url) }} style={styles.photo} />
+            <Image
+              source={{ uri: resolveOfflinePhotoUri(poi.photos[0].id, poi.photos[0].url) }}
+              style={styles.photo}
+              contentFit="cover"
+            />
           ) : (
             <View style={[styles.photo, styles.photoFallback]} />
           )}
@@ -245,7 +251,11 @@ export function SwipeDiscoveryModal({
                         ]}
                       >
                         {poi.photos[0] && (
-                          <Image source={{ uri: resolveOfflinePhotoUri(poi.photos[0].id, poi.photos[0].url) }} style={styles.photo} />
+                          <Image
+                            source={{ uri: resolveOfflinePhotoUri(poi.photos[0].id, poi.photos[0].url) }}
+                            style={styles.photo}
+                            contentFit="cover"
+                          />
                         )}
                       </View>
                     )
@@ -334,7 +344,7 @@ function createStyles(colors: ThemeColors) {
       paddingBottom: 18
     },
     photoWrap: { flex: 1, borderRadius: 6, overflow: "hidden", backgroundColor: colors.surfaceAlt },
-    photo: { width: "100%", height: "100%", resizeMode: "cover" },
+    photo: { width: "100%", height: "100%" },
     photoFallback: { backgroundColor: colors.surfaceAlt },
     mustVisitBadge: {
       position: "absolute",

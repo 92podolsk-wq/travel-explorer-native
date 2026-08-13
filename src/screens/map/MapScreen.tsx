@@ -1,17 +1,23 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, PixelRatio, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Text } from "@/shared/ui/AppText";
+import { TextInput } from "@/shared/ui/AppTextInput";
 import { LinearGradient } from "expo-linear-gradient";
 import Supercluster from "supercluster";
 import {
   Camera,
   type CameraRef,
+  GeoJSONSource,
+  Images,
+  Layer,
   Map as MapLibreMap,
   type MapRef,
-  Marker,
   UserLocation,
   useCurrentPosition
 } from "@maplibre/maplibre-react-native";
+import type { PressEventWithFeatures } from "@maplibre/maplibre-react-native";
+import type { NativeSyntheticEvent } from "react-native";
 import { fuzzyMatch } from "@/shared/lib/fuzzy-match";
 import { shuffle } from "@/shared/lib/shuffle";
 import { haversineDistanceMeters } from "@/shared/lib/geo";
@@ -32,7 +38,7 @@ import { CategoryFilterSheet } from "@/components/CategoryFilterSheet";
 import { RegionSwitcherModal } from "@/components/RegionSwitcherModal";
 import { PoiDetailSheet } from "@/components/PoiDetailSheet";
 import { PoiPreviewCard } from "@/components/map/PoiPreviewCard";
-import { CategoryIcon } from "@/components/CategoryIcon";
+import { MapMarkerSprites, customMarkerSpriteKey, poiSpriteKey } from "@/components/map/MapMarkerSprites";
 import { AddMarkerModal } from "@/components/map/AddMarkerModal";
 import { WeatherChips } from "@/components/map/WeatherChips";
 import { SeasonReminderBanner } from "@/components/map/SeasonReminderBanner";
@@ -41,6 +47,11 @@ import { AnimatedPressable } from "@/components/AnimatedPressable";
 import { HankoSeal } from "@/shared/ui/HankoSeal";
 import { useTheme } from "@/shared/theme/useTheme";
 import type { ThemeColors } from "@/shared/theme/colors";
+
+// Marker sprites are rasterized via react-native-view-shot at the device's
+// native pixel density, but the map treats registered images as 1x — without
+// this correction icons render one full pixelRatio too large.
+const MARKER_ICON_SIZE = 1 / PixelRatio.get();
 
 export function MapScreen() {
   const pois = useExplorerStore((state) => state.pois);
@@ -85,11 +96,13 @@ export function MapScreen() {
   const [isCategorySheetOpen, setIsCategorySheetOpen] = useState(false);
   const [pendingMarkerCoords, setPendingMarkerCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [previewPoiId, setPreviewPoiId] = useState<string | null>(null);
+  const [markerSpriteUris, setMarkerSpriteUris] = useState<Record<string, string>>({});
 
   const cameraRef = useRef<CameraRef>(null);
   const mapRef = useRef<MapRef>(null);
   const markerPressedAtRef = useRef(0);
   const previewCenterRef = useRef<[number, number] | null>(null);
+  const regionViewDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (authStatus !== "authenticated") return;
@@ -280,12 +293,81 @@ export function MapScreen() {
     cameraRef.current?.flyTo({ center, zoom: expansionZoom, duration: 400 });
   }
 
+  // Forces the cluster GL sources to fully remount on every region change
+  // rather than trust the `data` prop to update in place, since supercluster's
+  // recomputed cluster geometry didn't reliably reach the native circle/text
+  // layers otherwise. NOT used for poi-source: unmounting/remounting a symbol
+  // layer whose icon-image comes from runtime-registered <Images> sprites
+  // intermittently dropped icons specifically during zoom-in transitions —
+  // poi-source is left to update its `data` prop in place instead (confirmed
+  // stable across repeated zoom-in/zoom-out and cluster-tap cycles on-device).
+  const regionViewKey = `${Math.round(regionView.zoom * 10)}-${regionView.bounds.map((n) => n.toFixed(2)).join(",")}`;
+
+  // POI pins, cluster bubbles, and custom markers are drawn as native GL
+  // layers (not React-Native View overlays) so they stay perfectly locked to
+  // the map surface during pan/zoom instead of visibly lagging behind it.
+  const poiFeatureCollection = useMemo((): GeoJSON.FeatureCollection => ({
+    type: "FeatureCollection",
+    features: mapClusters
+      .filter((feature) => !("cluster" in feature.properties))
+      .map((feature) => {
+        const poiId = (feature.properties as { poiId: string }).poiId;
+        const poi = poisById.get(poiId);
+        const iconKey = poi ? poiSpriteKey(poi.category) : "";
+        return {
+          type: "Feature" as const,
+          geometry: feature.geometry,
+          properties: { poiId, iconKey }
+        };
+      })
+      .filter((feature) => markerSpriteUris[feature.properties.iconKey] != null)
+  }), [mapClusters, poisById, markerSpriteUris]);
+
+  const clusterFeatureCollection = useMemo((): GeoJSON.FeatureCollection => ({
+    type: "FeatureCollection",
+    features: mapClusters.filter((feature) => "cluster" in feature.properties) as GeoJSON.Feature[]
+  }), [mapClusters]);
+
+  const customMarkerFeatureCollection = useMemo((): GeoJSON.FeatureCollection => ({
+    type: "FeatureCollection",
+    features: customMarkers
+      .map((marker) => ({
+        type: "Feature" as const,
+        geometry: { type: "Point" as const, coordinates: [marker.lng, marker.lat] },
+        properties: { markerId: marker.id, iconKey: customMarkerSpriteKey(marker.color) }
+      }))
+      .filter((feature) => markerSpriteUris[feature.properties.iconKey] != null)
+  }), [customMarkers, markerSpriteUris]);
+
+  function handlePoiSourcePress(event: NativeSyntheticEvent<PressEventWithFeatures>) {
+    const poiId = event.nativeEvent.features[0]?.properties?.poiId as string | undefined;
+    if (!poiId) return;
+    markerPressedAtRef.current = Date.now();
+    setPreviewPoiId(poiId);
+  }
+
+  function handleClusterSourcePress(event: NativeSyntheticEvent<PressEventWithFeatures>) {
+    const feature = event.nativeEvent.features[0];
+    const clusterId = feature?.properties?.cluster_id as number | undefined;
+    if (clusterId == null || feature.geometry.type !== "Point") return;
+    const [lng, lat] = feature.geometry.coordinates;
+    handleClusterPress(clusterId, [lng, lat]);
+  }
+
+  function handleCustomMarkerSourcePress(event: NativeSyntheticEvent<PressEventWithFeatures>) {
+    const markerId = event.nativeEvent.features[0]?.properties?.markerId as string | undefined;
+    if (!markerId) return;
+    handleMarkerPress(markerId);
+  }
+
   const swipeCandidates = useMemo(() => {
     const regionPois = pois.filter((poi) => poi.regionId === activeRegionId);
-    const unswiped = regionPois.filter((poi) => !favorites.includes(poi.id) && !viewedPoiIds.includes(poi.id));
+    const unswiped = regionPois.filter(
+      (poi) => !favorites.includes(poi.id) && !viewedPoiIds.includes(poi.id) && selectedCategories.includes(poi.category)
+    );
     return shuffle(unswiped);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pois, activeRegionId, isSwipeOpen]);
+  }, [pois, activeRegionId, selectedCategories, isSwipeOpen]);
 
   const neighboringSwipeRegions = useMemo(() => {
     if (!activeRegion) return [];
@@ -351,7 +433,17 @@ export function MapScreen() {
         }}
         onRegionDidChange={(event) => {
           const { zoom, bounds } = event.nativeEvent;
-          setRegionView({ zoom, bounds });
+          // onRegionDidChange fires on every frame of an animated flyTo (cluster
+          // tap, "locate me", etc). regionViewKey below forces the icon-symbol
+          // GeoJSONSource to fully remount on each change — doing that on every
+          // intermediate animation frame raced the native sprite/icon resolution
+          // and left POI pins invisible after the camera settled. Debouncing to
+          // the last event after the camera stops means it remounts once, after
+          // the map is idle.
+          if (regionViewDebounceRef.current) clearTimeout(regionViewDebounceRef.current);
+          regionViewDebounceRef.current = setTimeout(() => {
+            setRegionView({ zoom, bounds });
+          }, 200);
         }}
       >
         <Camera
@@ -359,52 +451,81 @@ export function MapScreen() {
           initialViewState={{ center: [activeRegion.center.lng, activeRegion.center.lat], zoom: activeRegion.defaultZoom }}
         />
         <UserLocation animated accuracy heading />
-        {customMarkers.map((marker) => (
-          <Marker key={marker.id} id={marker.id} lngLat={[marker.lng, marker.lat]} onPress={() => handleMarkerPress(marker.id)}>
-            <View style={[styles.customPin, { backgroundColor: marker.color }]}>
-              <Ionicons name="location" size={14} color={colors.textInverse} />
-            </View>
-          </Marker>
-        ))}
-        {mapClusters.map((feature) => {
-          const [lng, lat] = feature.geometry.coordinates;
 
-          if ("cluster" in feature.properties) {
-            const clusterId = feature.properties.cluster_id;
-            return (
-              <Marker
-                key={`cluster-${clusterId}`}
-                id={`cluster-${clusterId}`}
-                lngLat={[lng, lat]}
-                onPress={() => handleClusterPress(clusterId, [lng, lat])}
-              >
-                <View style={styles.clusterPin}>
-                  <Text style={styles.clusterPinLabel}>{feature.properties.point_count_abbreviated}</Text>
-                </View>
-              </Marker>
-            );
-          }
+        {Object.keys(markerSpriteUris).length > 0 ? <Images images={markerSpriteUris} /> : null}
 
-          const poi = poisById.get(feature.properties.poiId);
-          if (!poi) return null;
-          const category = categoriesById.get(poi.category);
-          return (
-            <Marker
-              key={poi.id}
-              id={poi.id}
-              lngLat={[lng, lat]}
-              onPress={() => {
-                markerPressedAtRef.current = Date.now();
-                setPreviewPoiId(poi.id);
-              }}
-            >
-              <View style={[styles.pin, { backgroundColor: category?.color ?? "#7a7a7a" }]}>
-                <CategoryIcon icon={category?.icon ?? ""} size={13} />
-              </View>
-            </Marker>
-          );
-        })}
+        <GeoJSONSource
+          key={`cluster-circle-${regionViewKey}`}
+          id="cluster-circle-source"
+          data={clusterFeatureCollection}
+          onPress={handleClusterSourcePress}
+        >
+          <Layer
+            type="circle"
+            id="cluster-circle-layer"
+            source="cluster-circle-source"
+            paint={{
+              "circle-color": colors.primary,
+              "circle-radius": 19,
+              "circle-stroke-width": 2,
+              "circle-stroke-color": "#ffffff"
+            }}
+          />
+        </GeoJSONSource>
+
+        <GeoJSONSource
+          key={`cluster-text-${regionViewKey}`}
+          id="cluster-text-source"
+          data={clusterFeatureCollection}
+          onPress={handleClusterSourcePress}
+        >
+          <Layer
+            type="symbol"
+            id="cluster-text-layer"
+            source="cluster-text-source"
+            layout={{
+              "text-field": ["get", "point_count_abbreviated"],
+              "text-font": ["Noto Sans Bold"],
+              "text-size": 13,
+              "text-allow-overlap": true,
+              "text-ignore-placement": true
+            }}
+            paint={{ "text-color": colors.textInverse }}
+          />
+        </GeoJSONSource>
+
+        <GeoJSONSource id="poi-source" data={poiFeatureCollection} onPress={handlePoiSourcePress}>
+          <Layer
+            type="symbol"
+            id="poi-icon-layer"
+            source="poi-source"
+            layout={{
+              "icon-image": ["get", "iconKey"],
+              "icon-size": MARKER_ICON_SIZE,
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
+              "icon-anchor": "center"
+            }}
+          />
+        </GeoJSONSource>
+
+        <GeoJSONSource id="custom-marker-source" data={customMarkerFeatureCollection} onPress={handleCustomMarkerSourcePress}>
+          <Layer
+            type="symbol"
+            id="custom-marker-icon-layer"
+            source="custom-marker-source"
+            layout={{
+              "icon-image": ["get", "iconKey"],
+              "icon-size": MARKER_ICON_SIZE,
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
+              "icon-anchor": "center"
+            }}
+          />
+        </GeoJSONSource>
       </MapLibreMap>
+
+      <MapMarkerSprites categories={categories} onReady={setMarkerSpriteUris} />
 
       {previewPoi ? (
         <View style={styles.previewOverlay} pointerEvents="box-none">
@@ -513,7 +634,7 @@ export function MapScreen() {
         hitSlop={4}
         accessibilityLabel={t.app.swipeDiscovery}
       >
-        <Text style={styles.discoverButtonEmoji}>🎲</Text>
+        <Ionicons name="sparkles" size={22} color="#ffffff" />
       </AnimatedPressable>
 
       <RegionSwitcherModal
@@ -578,47 +699,6 @@ function createStyles(colors: ThemeColors) {
       bottom: 88,
       alignItems: "center"
     },
-    pin: {
-      width: 26,
-      height: 26,
-      borderRadius: 13,
-      borderWidth: 2,
-      borderColor: "#ffffff",
-      alignItems: "center",
-      justifyContent: "center",
-      shadowColor: "#000",
-      shadowOpacity: 0.25,
-      shadowRadius: 2,
-      elevation: 3
-    },
-    customPin: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      borderWidth: 2,
-      borderColor: "#ffffff",
-      alignItems: "center",
-      justifyContent: "center",
-      shadowColor: "#000",
-      shadowOpacity: 0.3,
-      shadowRadius: 2,
-      elevation: 3
-    },
-    clusterPin: {
-      width: 38,
-      height: 38,
-      borderRadius: 19,
-      borderWidth: 2,
-      borderColor: "#ffffff",
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.primary,
-      shadowColor: "#000",
-      shadowOpacity: 0.3,
-      shadowRadius: 3,
-      elevation: 4
-    },
-    clusterPinLabel: { color: colors.textInverse, fontSize: 13, fontWeight: "800" },
     topOverlay: { position: "absolute", top: 0, left: 0, right: 0 },
     heroCard: {
       overflow: "hidden",

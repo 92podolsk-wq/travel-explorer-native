@@ -2,9 +2,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { Alert, Image, Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Linking, ScrollView, StyleSheet, Switch, TouchableOpacity, View } from "react-native";
+import { Text } from "@/shared/ui/AppText";
+import { TextInput } from "@/shared/ui/AppTextInput";
+import { Image } from "expo-image";
 import { avatarIds } from "@/entities/user/model/avatars";
-import { revokeToken, updateAvatar } from "@/shared/api/auth";
+import { revokeToken, updateAvatar, updateProfile } from "@/shared/api/auth";
+import { ApiError } from "@/shared/api/client";
+import { AnimatedCenterModal } from "@/components/AnimatedModal";
 import { registerPushTokenApi, unregisterPushTokenApi } from "@/shared/api/push-notifications";
 import { useTranslations } from "@/shared/i18n/useTranslations";
 import {
@@ -25,6 +30,10 @@ import type { ThemeColors } from "@/shared/theme/colors";
 import { LanguagePickerModal, LANGUAGE_LABELS } from "@/components/LanguagePickerModal";
 import { NotificationHistoryModal } from "@/components/NotificationHistoryModal";
 import { PackingChecklistCard } from "@/components/profile/PackingChecklistCard";
+import { FriendsCard } from "@/components/profile/FriendsCard";
+import { SharedChecklistsCard } from "@/components/profile/SharedChecklistsCard";
+import { SharedItinerariesCard } from "@/components/profile/SharedItinerariesCard";
+import { SharedTripModal } from "@/components/SharedTripModal";
 
 const APP_VERSION = "1.0.0";
 
@@ -55,7 +64,16 @@ export function ProfileScreen() {
   const downloadedRegionIds = useExplorerStore((state) => state.downloadedRegionIds);
   const setDownloadedRegionIds = useExplorerStore((state) => state.setDownloadedRegionIds);
 
+  const hydrateAuth = useExplorerStore((state) => state.hydrateAuth);
+
   const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [usernameDraft, setUsernameDraft] = useState("");
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [hideFromSearchDraft, setHideFromSearchDraft] = useState(false);
+  const [openSharedTripId, setOpenSharedTripId] = useState<string | null>(null);
   const [isLanguagePickerOpen, setIsLanguagePickerOpen] = useState(false);
   const [isNotificationHistoryOpen, setIsNotificationHistoryOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -78,6 +96,29 @@ export function ProfileScreen() {
     setAvatarId(avatarId);
     setIsAvatarPickerOpen(false);
     updateAvatar(avatarId).catch(() => {});
+  }
+
+  function handleStartEditProfile() {
+    setNameDraft(currentUser?.name ?? "");
+    setUsernameDraft(currentUser?.username ?? "");
+    setHideFromSearchDraft(currentUser?.hideFromSearch ?? false);
+    setProfileError(null);
+    setIsEditProfileOpen(true);
+  }
+
+  async function handleSaveProfile() {
+    setProfileError(null);
+    setIsSavingProfile(true);
+    try {
+      const { user } = await updateProfile(nameDraft, usernameDraft, hideFromSearchDraft);
+      hydrateAuth(user);
+      setIsEditProfileOpen(false);
+    } catch (err) {
+      const serverMessage = err instanceof ApiError && (err.body as { error?: string } | null)?.error;
+      setProfileError(serverMessage || t.auth.registerError);
+    } finally {
+      setIsSavingProfile(false);
+    }
   }
 
   async function handleToggleNotifications(value: boolean) {
@@ -247,13 +288,16 @@ export function ProfileScreen() {
                 <Ionicons name="pencil" size={10} color={colors.textInverse} />
               </View>
             </TouchableOpacity>
-            <View style={styles.nameRow}>
-              <Text style={styles.name}>{currentUser.name || currentUser.email}</Text>
-              <View style={styles.travelerBadge}>
-                <Text style={styles.travelerBadgeLabel}>{t.auth.travelerBadge}</Text>
+            <TouchableOpacity onPress={handleStartEditProfile}>
+              <View style={styles.nameRow}>
+                <Text style={styles.name}>{currentUser.name || currentUser.email}</Text>
+                <View style={styles.travelerBadge}>
+                  <Text style={styles.travelerBadgeLabel}>{t.auth.travelerBadge}</Text>
+                </View>
+                <Ionicons name="pencil" size={11} color={colors.heroTextMuted} />
               </View>
-            </View>
-            <Text style={styles.email}>{currentUser.email}</Text>
+              <Text style={styles.email}>@{currentUser.username}</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.header}>
@@ -289,6 +333,12 @@ export function ProfileScreen() {
           </View>
         </View>
       ) : null}
+
+      {currentUser ? <FriendsCard /> : null}
+
+      {currentUser ? <SharedChecklistsCard /> : null}
+
+      {currentUser ? <SharedItinerariesCard onOpen={setOpenSharedTripId} /> : null}
 
       {isAvatarPickerOpen && currentUser ? (
         <View style={styles.avatarCard}>
@@ -361,7 +411,7 @@ export function ProfileScreen() {
               return (
                 <View key={region.id} style={styles.offlineRow}>
                   {thumbnail ? (
-                    <Image source={{ uri: thumbnail }} style={styles.offlineThumbnail} />
+                    <Image source={{ uri: thumbnail }} style={styles.offlineThumbnail} contentFit="cover" />
                   ) : (
                     <View style={[styles.offlineThumbnail, styles.offlineThumbnailFallback]} />
                   )}
@@ -489,6 +539,41 @@ export function ProfileScreen() {
         onClose={() => setIsLanguagePickerOpen(false)}
       />
       <NotificationHistoryModal visible={isNotificationHistoryOpen} onClose={() => setIsNotificationHistoryOpen(false)} />
+
+      <AnimatedCenterModal
+        visible={isEditProfileOpen}
+        onClose={() => setIsEditProfileOpen(false)}
+        backdropColor="rgba(0,0,0,0.4)"
+        contentStyle={styles.editProfileCard}
+      >
+        <Text style={styles.sectionTitle}>{t.auth.editProfile}</Text>
+        <Text style={[styles.settingLabel, { marginTop: 12 }]}>{t.auth.name}</Text>
+        <TextInput style={styles.editProfileInput} value={nameDraft} onChangeText={setNameDraft} autoCapitalize="words" />
+        <Text style={[styles.settingLabel, { marginTop: 10 }]}>{t.auth.username}</Text>
+        <TextInput
+          style={styles.editProfileInput}
+          value={usernameDraft}
+          onChangeText={(value) => setUsernameDraft(value.toLowerCase())}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <Text style={styles.sectionSubtitle}>{t.auth.usernameHint}</Text>
+        <View style={styles.hideFromSearchRow}>
+          <Text style={[styles.settingLabel, { flex: 1 }]}>{t.auth.hideFromSearch}</Text>
+          <Switch value={hideFromSearchDraft} onValueChange={setHideFromSearchDraft} />
+        </View>
+        {profileError ? <Text style={[styles.sectionSubtitle, { color: colors.danger, marginTop: 6 }]}>{profileError}</Text> : null}
+        <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
+          <TouchableOpacity onPress={() => setIsEditProfileOpen(false)} style={styles.editProfileCancelButton}>
+            <Text style={styles.editProfileCancelLabel}>{t.auth.cancel}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => void handleSaveProfile()} disabled={isSavingProfile} style={styles.editProfileSaveButton}>
+            <Text style={styles.editProfileSaveLabel}>{t.auth.save}</Text>
+          </TouchableOpacity>
+        </View>
+      </AnimatedCenterModal>
+
+      <SharedTripModal itineraryId={openSharedTripId} onClose={() => setOpenSharedTripId(null)} />
     </ScrollView>
   );
 }
@@ -634,6 +719,23 @@ function createStyles(colors: ThemeColors) {
       marginTop: 4
     },
     logoutLabel: { fontSize: 14, fontWeight: "700", color: colors.danger },
-    logoutChevron: { marginLeft: "auto" }
+    logoutChevron: { marginLeft: "auto" },
+    editProfileCard: { backgroundColor: colors.surface, borderRadius: 16, padding: 18 },
+    hideFromSearchRow: { flexDirection: "row", alignItems: "center", marginTop: 12 },
+    editProfileInput: {
+      backgroundColor: colors.background,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      marginTop: 4,
+      fontSize: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      color: colors.textPrimary
+    },
+    editProfileCancelButton: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10 },
+    editProfileCancelLabel: { fontSize: 13, fontWeight: "700", color: colors.textSecondary },
+    editProfileSaveButton: { backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 10 },
+    editProfileSaveLabel: { fontSize: 13, fontWeight: "700", color: colors.textInverse }
   });
 }

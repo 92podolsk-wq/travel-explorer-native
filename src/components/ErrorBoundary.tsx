@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { Text } from "@/shared/ui/AppText";
 import { Ionicons } from "@expo/vector-icons";
 
 type ErrorBoundaryProps = { children: ReactNode };

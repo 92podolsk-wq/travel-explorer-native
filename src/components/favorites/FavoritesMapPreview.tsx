@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { Text } from "@/shared/ui/AppText";
 import { Camera, type CameraRef, Map as MapLibreMap, Marker } from "@maplibre/maplibre-react-native";
 import type { Category } from "@/entities/category/model/types";
 import type { Poi } from "@/entities/poi/model/types";

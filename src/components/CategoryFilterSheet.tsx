@@ -1,9 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useMemo } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Text } from "@/shared/ui/AppText";
 import type { Category } from "@/entities/category/model/types";
 import { useTranslations } from "@/shared/i18n/useTranslations";
 import { useExplorerStore } from "@/shared/model/explorer-store";
+import { AnimatedBottomSheet } from "@/components/AnimatedModal";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { useTheme } from "@/shared/theme/useTheme";
 import type { ThemeColors } from "@/shared/theme/colors";
@@ -27,9 +29,7 @@ export function CategoryFilterSheet({ visible, categories, selectedCategories, o
   const visibleCategories = categories.filter((category) => !category.isHidden);
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={styles.sheet}>
+    <AnimatedBottomSheet visible={visible} onClose={onClose} backdropColor={colors.overlay} contentStyle={styles.sheet}>
         <View style={styles.handle} />
         <View style={styles.headerRow}>
           <Text style={styles.title}>{t.app.categoryFiltersTitle}</Text>
@@ -69,14 +69,12 @@ export function CategoryFilterSheet({ visible, categories, selectedCategories, o
         <TouchableOpacity style={styles.doneButton} onPress={onClose}>
           <Text style={styles.doneButtonLabel}>{t.app.categoryFiltersDone}</Text>
         </TouchableOpacity>
-      </View>
-    </Modal>
+    </AnimatedBottomSheet>
   );
 }
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: colors.overlay },
     sheet: {
       position: "absolute",
       left: 0,

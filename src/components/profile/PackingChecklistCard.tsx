@@ -1,12 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { Text } from "@/shared/ui/AppText";
+import { TextInput } from "@/shared/ui/AppTextInput";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslations } from "@/shared/i18n/useTranslations";
 import { useTheme } from "@/shared/theme/useTheme";
 import type { ThemeColors } from "@/shared/theme/colors";
+import { useExplorerStore } from "@/shared/model/explorer-store";
+import { ProfileAvatar } from "@/shared/ui/ProfileAvatar";
+import { getFriends } from "@/shared/api/friends";
+import {
+  getChecklistShareTargets,
+  getServerChecklist,
+  shareChecklistWithFriend,
+  unshareChecklistWithFriend,
+  updateServerChecklist
+} from "@/shared/api/checklist";
+import type { FriendUser } from "@/entities/user/model/types";
 import {
   getChecklistState,
+  syncServerChecklistReminder,
   updateChecklistState,
   type ChecklistItem,
   type PackingChecklistState
@@ -88,17 +102,64 @@ export function PackingChecklistCard() {
   const t = useTranslations();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const currentUser = useExplorerStore((state) => state.currentUser);
   const [state, setState] = useState<PackingChecklistState | null>(null);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [friends, setFriends] = useState<FriendUser[]>([]);
+  const [shareTargetIds, setShareTargetIds] = useState<Set<string>>(new Set());
+  const [pendingShareId, setPendingShareId] = useState<string | null>(null);
 
   useEffect(() => {
-    getChecklistState().then(setState);
-  }, []);
+    if (currentUser) {
+      getServerChecklist().then(({ checklist }) => {
+        setState({ ...checklist, reminderNotificationId: null });
+        void syncServerChecklistReminder(checklist);
+      });
+    } else {
+      getChecklistState().then(setState);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]);
 
   async function applyPatch(patch: Partial<Pick<PackingChecklistState, "tripDate" | "packingItems" | "shoppingItems">>) {
     if (!state) return;
-    const updated = await updateChecklistState(state, patch);
-    setState(updated);
+    if (currentUser) {
+      const merged = { ...state, ...patch };
+      setState(merged);
+      const { checklist } = await updateServerChecklist(patch);
+      void syncServerChecklistReminder(checklist);
+    } else {
+      const updated = await updateChecklistState(state, patch);
+      setState(updated);
+    }
+  }
+
+  function openShare() {
+    setIsShareOpen((value) => !value);
+    if (friends.length === 0) {
+      getFriends().then((body) => setFriends(body.friends.map((entry) => entry.user)));
+    }
+    getChecklistShareTargets().then((body) => setShareTargetIds(new Set(body.users.map((user) => user.id))));
+  }
+
+  async function toggleShare(friendId: string, isShared: boolean) {
+    setPendingShareId(friendId);
+    try {
+      if (isShared) {
+        await unshareChecklistWithFriend(friendId);
+        setShareTargetIds((prev) => {
+          const next = new Set(prev);
+          next.delete(friendId);
+          return next;
+        });
+      } else {
+        await shareChecklistWithFriend(friendId);
+        setShareTargetIds((prev) => new Set(prev).add(friendId));
+      }
+    } finally {
+      setPendingShareId(null);
+    }
   }
 
   if (!state) return null;
@@ -118,7 +179,46 @@ export function PackingChecklistCard() {
 
   return (
     <View style={styles.card}>
-      <Text style={styles.cardTitle}>{t.app.checklistCardTitle}</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.cardTitle}>{t.app.checklistCardTitle}</Text>
+        {currentUser ? (
+          <TouchableOpacity style={styles.shareButton} onPress={openShare}>
+            <Ionicons name="share-social-outline" size={13} color={colors.textSecondary} />
+            <Text style={styles.shareButtonLabel}>{t.auth.shareChecklist}</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      {isShareOpen && currentUser ? (
+        <View style={styles.shareCard}>
+          {friends.length === 0 ? (
+            <Text style={styles.mutedText}>{t.auth.friendsEmpty}</Text>
+          ) : (
+            friends.map((friend) => {
+              const isShared = shareTargetIds.has(friend.id);
+              return (
+                <View key={friend.id} style={styles.shareRow}>
+                  <View style={styles.shareRowUser}>
+                    <ProfileAvatar avatarId={friend.avatarId} size={24} />
+                    <Text style={styles.shareRowName} numberOfLines={1}>
+                      {friend.name || `@${friend.username}`}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={isShared ? styles.secondaryButton : styles.primaryButton}
+                    onPress={() => void toggleShare(friend.id, isShared)}
+                    disabled={pendingShareId === friend.id}
+                  >
+                    <Text style={isShared ? styles.secondaryButtonLabel : styles.primaryButtonLabel}>
+                      {isShared ? t.auth.friendsRemove : t.auth.friendsAdd}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })
+          )}
+        </View>
+      ) : null}
 
       <TouchableOpacity style={styles.dateRow} onPress={() => setIsDatePickerOpen(true)}>
         <Ionicons name="calendar-outline" size={14} color={colors.primary} />
@@ -176,14 +276,25 @@ function createStyles(colors: ThemeColors) {
       padding: 16,
       marginBottom: 16
     },
+    headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
     cardTitle: {
       fontSize: 13,
       fontWeight: "800",
       color: colors.textTertiary,
       textTransform: "uppercase",
-      letterSpacing: 0.5,
-      marginBottom: 10
+      letterSpacing: 0.5
     },
+    shareButton: { flexDirection: "row", alignItems: "center", gap: 4 },
+    shareButtonLabel: { fontSize: 11, fontWeight: "600", color: colors.textSecondary },
+    shareCard: { backgroundColor: colors.background, borderRadius: 10, padding: 10, marginBottom: 12, gap: 8 },
+    mutedText: { fontSize: 12, color: colors.textTertiary },
+    shareRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+    shareRowUser: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, minWidth: 0 },
+    shareRowName: { fontSize: 12, fontWeight: "600", color: colors.textPrimary, flexShrink: 1 },
+    primaryButton: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: colors.primarySoft },
+    primaryButtonLabel: { fontSize: 11, fontWeight: "700", color: colors.primary },
+    secondaryButton: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: colors.border },
+    secondaryButtonLabel: { fontSize: 11, fontWeight: "700", color: colors.textSecondary },
     dateRow: {
       flexDirection: "row",
       alignItems: "center",

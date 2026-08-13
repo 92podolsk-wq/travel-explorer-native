@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { FlatList, Modal, Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { FlatList, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Text } from "@/shared/ui/AppText";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslations } from "@/shared/i18n/useTranslations";
+import { AnimatedBottomSheet } from "@/components/AnimatedModal";
 import { useTheme } from "@/shared/theme/useTheme";
 import type { ThemeColors } from "@/shared/theme/colors";
 import {
@@ -38,9 +40,7 @@ export function NotificationHistoryModal({ visible, onClose }: NotificationHisto
   }, [visible]);
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={styles.sheet}>
+    <AnimatedBottomSheet visible={visible} onClose={onClose} backdropColor={colors.overlay} contentStyle={styles.sheet}>
         <View style={styles.handle} />
         <View style={styles.headerRow}>
           <Text style={styles.title}>{t.auth.notificationHistoryTitle}</Text>
@@ -73,14 +73,12 @@ export function NotificationHistoryModal({ visible, onClose }: NotificationHisto
             )}
           />
         )}
-      </View>
-    </Modal>
+    </AnimatedBottomSheet>
   );
 }
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: colors.overlay },
     sheet: {
       position: "absolute",
       left: 0,

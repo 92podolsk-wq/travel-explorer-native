@@ -1,9 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Text } from "@/shared/ui/AppText";
+import { TextInput } from "@/shared/ui/AppTextInput";
 import type { Region } from "@/entities/region/model/types";
 import { useTranslations } from "@/shared/i18n/useTranslations";
 import { useExplorerStore } from "@/shared/model/explorer-store";
+import { AnimatedBottomSheet } from "@/components/AnimatedModal";
 import { useTheme } from "@/shared/theme/useTheme";
 import type { ThemeColors } from "@/shared/theme/colors";
 
@@ -44,9 +47,7 @@ export function ItineraryGeneratorModal({ visible, regions, onClose, onSubmit }:
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+    <AnimatedBottomSheet visible={visible} onClose={onClose} backdropColor={colors.overlay} contentStyle={styles.sheet}>
           <View style={styles.headerRow}>
             <Text style={styles.title}>{t.auth.buildRoute}</Text>
             <TouchableOpacity onPress={onClose}>
@@ -109,15 +110,12 @@ export function ItineraryGeneratorModal({ visible, regions, onClose, onSubmit }:
               <Text style={styles.submitLabel}>{t.auth.generateItinerarySubmit}</Text>
             )}
           </TouchableOpacity>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </AnimatedBottomSheet>
   );
 }
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" },
     sheet: { backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
     headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
     title: { fontSize: 18, fontWeight: "700", color: colors.textPrimary },

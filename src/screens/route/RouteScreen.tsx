@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, Share, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, ScrollView, Share, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Text } from "@/shared/ui/AppText";
+import { TextInput } from "@/shared/ui/AppTextInput";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { NestableScrollContainer } from "react-native-draggable-flatlist";
 import { useTranslations } from "@/shared/i18n/useTranslations";
@@ -31,6 +33,10 @@ import { saveWidgetTripSummary } from "@/shared/storage/widget-trip-summary";
 import { refreshTripCountdownWidget } from "@/widgets/trip-countdown/TripCountdownWidget";
 import { useTheme } from "@/shared/theme/useTheme";
 import type { ThemeColors } from "@/shared/theme/colors";
+import { ProfileAvatar } from "@/shared/ui/ProfileAvatar";
+import { getFriends } from "@/shared/api/friends";
+import { getItineraryShareTargets, shareItineraryWithFriend, unshareItineraryWithFriend } from "@/shared/api/itinerary-shares";
+import type { FriendUser } from "@/entities/user/model/types";
 
 export function RouteScreen() {
   const t = useTranslations();
@@ -52,6 +58,40 @@ export function RouteScreen() {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const currentUser = useExplorerStore((state) => state.currentUser);
+  const [isFriendShareOpen, setIsFriendShareOpen] = useState(false);
+  const [shareFriends, setShareFriends] = useState<FriendUser[]>([]);
+  const [itineraryShareTargetIds, setItineraryShareTargetIds] = useState<Set<string>>(new Set());
+  const [pendingShareId, setPendingShareId] = useState<string | null>(null);
+
+  function openItineraryFriendShare() {
+    if (!itinerary) return;
+    setIsFriendShareOpen((value) => !value);
+    if (shareFriends.length === 0) {
+      getFriends().then((body) => setShareFriends(body.friends.map((entry) => entry.user)));
+    }
+    getItineraryShareTargets(itinerary.id).then((body) => setItineraryShareTargetIds(new Set(body.users.map((user) => user.id))));
+  }
+
+  async function toggleItineraryFriendShare(friendId: string, isShared: boolean) {
+    if (!itinerary) return;
+    setPendingShareId(friendId);
+    try {
+      if (isShared) {
+        await unshareItineraryWithFriend(itinerary.id, friendId);
+        setItineraryShareTargetIds((prev) => {
+          const next = new Set(prev);
+          next.delete(friendId);
+          return next;
+        });
+      } else {
+        await shareItineraryWithFriend(itinerary.id, friendId);
+        setItineraryShareTargetIds((prev) => new Set(prev).add(friendId));
+      }
+    } finally {
+      setPendingShareId(null);
+    }
+  }
 
   useEffect(() => {
     if (!itinerary) return;
@@ -238,6 +278,38 @@ export function RouteScreen() {
         </View>
       ) : (
         <NestableScrollContainer contentContainerStyle={styles.scrollContent}>
+          {isFriendShareOpen ? (
+            <View style={styles.friendShareCard}>
+              {shareFriends.length === 0 ? (
+                <Text style={styles.friendShareEmpty}>{t.auth.friendsEmpty}</Text>
+              ) : (
+                shareFriends.map((friend) => {
+                  const isShared = itineraryShareTargetIds.has(friend.id);
+                  return (
+                    <View key={friend.id} style={styles.friendShareRow}>
+                      <View style={styles.friendShareUser}>
+                        <ProfileAvatar avatarId={friend.avatarId} size={24} />
+                        <Text style={styles.friendShareName} numberOfLines={1}>
+                          {friend.name || `@${friend.username}`}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={isShared ? styles.friendShareSecondaryButton : styles.friendSharePrimaryButton}
+                        onPress={() => void toggleItineraryFriendShare(friend.id, isShared)}
+                        disabled={pendingShareId === friend.id}
+                      >
+                        <Text
+                          style={isShared ? styles.friendShareSecondaryButtonLabel : styles.friendSharePrimaryButtonLabel}
+                        >
+                          {isShared ? t.auth.friendsRemove : t.auth.friendsAdd}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          ) : null}
           <View style={styles.titleRow}>
             {isEditingTitle ? (
               <TextInput
@@ -265,6 +337,11 @@ export function RouteScreen() {
             <TouchableOpacity onPress={handleShareItinerary} style={styles.iconButton}>
               <Ionicons name="share-social-outline" size={18} color={colors.icon} />
             </TouchableOpacity>
+            {currentUser ? (
+              <TouchableOpacity onPress={openItineraryFriendShare} style={styles.iconButton}>
+                <Ionicons name="person-add-outline" size={18} color={colors.icon} />
+              </TouchableOpacity>
+            ) : null}
             {itineraries.length > 1 ? (
               <TouchableOpacity onPress={handleDeleteItinerary} style={styles.iconButton}>
                 <Ionicons name="trash-outline" size={18} color={colors.danger} />
@@ -378,6 +455,21 @@ function createStyles(colors: ThemeColors) {
     itineraryTitle: { fontSize: 20, fontWeight: "800", color: colors.textPrimary },
     titleInput: { flex: 1, fontSize: 20, fontWeight: "800", color: colors.textPrimary, borderBottomWidth: 1, borderBottomColor: colors.primary },
     iconButton: { padding: 6 },
+    friendShareCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 10, marginBottom: 12, gap: 8 },
+    friendShareEmpty: { fontSize: 12, color: colors.textTertiary },
+    friendShareRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+    friendShareUser: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, minWidth: 0 },
+    friendShareName: { fontSize: 12, fontWeight: "600", color: colors.textPrimary, flexShrink: 1 },
+    friendSharePrimaryButton: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: colors.primarySoft },
+    friendSharePrimaryButtonLabel: { fontSize: 11, fontWeight: "700", color: colors.primary },
+    friendShareSecondaryButton: {
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderWidth: 1,
+      borderColor: colors.border
+    },
+    friendShareSecondaryButtonLabel: { fontSize: 11, fontWeight: "700", color: colors.textSecondary },
     startDateRow: {
       flexDirection: "row",
       alignItems: "center",

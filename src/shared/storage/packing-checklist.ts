@@ -95,3 +95,43 @@ export async function updateChecklistState(
   await persist(withReminder);
   return withReminder;
 }
+
+const SERVER_REMINDER_KEY = "wayora:packingChecklistServerReminderId";
+
+// Mirrors syncReminder's scheduling logic for the server-backed checklist
+// (used once a user is logged in). The reminder notification is inherently
+// per-device, so its id is kept in a storage key separate from the synced
+// checklist content rather than round-tripped to the server.
+export async function syncServerChecklistReminder(content: {
+  tripDate: string | null;
+  packingItems: ChecklistItem[];
+}): Promise<void> {
+  const existingId = await AsyncStorage.getItem(SERVER_REMINDER_KEY);
+  if (existingId) {
+    await Notifications.cancelScheduledNotificationAsync(existingId).catch(() => {});
+  }
+
+  const hasUnchecked = content.packingItems.some((item) => !item.checked);
+  const tripTime = content.tripDate ? new Date(content.tripDate).getTime() : null;
+
+  if (!tripTime || !hasUnchecked || tripTime <= Date.now()) {
+    await AsyncStorage.removeItem(SERVER_REMINDER_KEY);
+    return;
+  }
+
+  const reminderTime = Math.max(tripTime - REMINDER_LEAD_MS, Date.now() + 5_000);
+
+  const id = await Notifications.scheduleNotificationAsync({
+    content: {
+      title: "Пора собирать чемодан",
+      body: "До поездки меньше суток, а в чек-листе сборов остались неотмеченные пункты."
+    },
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(reminderTime) }
+  }).catch(() => null);
+
+  if (id) {
+    await AsyncStorage.setItem(SERVER_REMINDER_KEY, id);
+  } else {
+    await AsyncStorage.removeItem(SERVER_REMINDER_KEY);
+  }
+}

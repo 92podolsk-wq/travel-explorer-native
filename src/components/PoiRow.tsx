@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { ReactNode } from "react";
 import { useMemo } from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { Text } from "@/shared/ui/AppText";
+import { Image } from "expo-image";
 import type { Poi } from "@/entities/poi/model/types";
 import { resolveOfflinePhotoUri } from "@/shared/map/offline-maps";
 import { useTheme } from "@/shared/theme/useTheme";
@@ -24,7 +26,7 @@ export function PoiRow({ poi, regionName, onSelect, action }: PoiRowProps) {
     <View style={styles.row}>
       <TouchableOpacity style={styles.main} onPress={onSelect} activeOpacity={0.7}>
         {photoUrl ? (
-          <Image source={{ uri: photoUrl }} style={styles.thumbnail} />
+          <Image source={{ uri: photoUrl }} style={styles.thumbnail} contentFit="cover" />
         ) : (
           <View style={[styles.thumbnail, styles.thumbnailFallback]}>
             <Ionicons name="location-outline" size={18} color={colors.textTertiary} />

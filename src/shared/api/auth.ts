@@ -11,11 +11,11 @@ export function login(email: string, password: string): Promise<AuthResponse> {
   });
 }
 
-export function register(email: string, password: string, name?: string): Promise<AuthResponse> {
+export function register(email: string, password: string, username: string, name?: string): Promise<AuthResponse> {
   return apiJson<AuthResponse>("/api/auth/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, name })
+    body: JSON.stringify({ email, password, username, name })
   });
 }
 
@@ -36,5 +36,13 @@ export function updateAvatar(avatarId: string): Promise<{ user: User }> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ avatarId })
+  });
+}
+
+export function updateProfile(name: string, username: string, hideFromSearch?: boolean): Promise<{ user: User }> {
+  return apiJson<{ user: User }>("/api/me/profile", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, username, hideFromSearch })
   });
 }

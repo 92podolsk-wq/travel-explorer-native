@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Text } from "@/shared/ui/AppText";
+import { TextInput } from "@/shared/ui/AppTextInput";
 import { login, register, getMe } from "@/shared/api/auth";
+import { ApiError } from "@/shared/api/client";
 import { saveToken } from "@/shared/storage/token-storage";
 import { useExplorerStore } from "@/shared/model/explorer-store";
 import { useTranslations } from "@/shared/i18n/useTranslations";
@@ -18,6 +21,7 @@ export function AuthScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -25,7 +29,8 @@ export function AuthScreen() {
     setError(null);
     setIsSubmitting(true);
     try {
-      const { token } = mode === "login" ? await login(email, password) : await register(email, password, name || undefined);
+      const { token } =
+        mode === "login" ? await login(email, password) : await register(email, password, username, name || undefined);
       await saveToken(token);
       const me = await getMe();
       hydrateAuth(
@@ -38,8 +43,9 @@ export function AuthScreen() {
             }
           : undefined
       );
-    } catch {
-      setError(mode === "login" ? t.auth.loginError : t.auth.registerError);
+    } catch (err) {
+      const serverMessage = err instanceof ApiError && (err.body as { error?: string } | null)?.error;
+      setError(serverMessage || (mode === "login" ? t.auth.loginError : t.auth.registerError));
     } finally {
       setIsSubmitting(false);
     }
@@ -52,6 +58,16 @@ export function AuthScreen() {
     >
       <Text style={styles.title}>{mode === "login" ? t.auth.loginTitle : t.auth.registerTitle}</Text>
 
+      {mode === "register" && (
+        <TextInput
+          style={styles.input}
+          placeholder={t.auth.username}
+          value={username}
+          onChangeText={(value) => setUsername(value.toLowerCase())}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      )}
       {mode === "register" && (
         <TextInput style={styles.input} placeholder={t.auth.name} value={name} onChangeText={setName} autoCapitalize="words" />
       )}

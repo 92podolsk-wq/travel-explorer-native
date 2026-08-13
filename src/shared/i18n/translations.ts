@@ -76,6 +76,33 @@ type TranslationDictionary = {
     email: string;
     password: string;
     name: string;
+    username: string;
+    usernameHint: string;
+    editProfile: string;
+    save: string;
+    profileUpdated: string;
+    hideFromSearch: string;
+    friendsTitle: string;
+    friendsSearchPlaceholder: string;
+    friendsSearching: string;
+    friendsNoResults: string;
+    friendsAdd: string;
+    friendsAlreadyFriends: string;
+    friendsRequestSent: string;
+    friendsRespondBelow: string;
+    friendsIncomingTitle: string;
+    friendsAccept: string;
+    friendsDecline: string;
+    friendsOutgoingTitle: string;
+    friendsCancel: string;
+    friendsListTitle: string;
+    friendsLoading: string;
+    friendsEmpty: string;
+    friendsRemove: string;
+    shareChecklist: string;
+    sharedChecklistsTitle: string;
+    shareItineraryWithFriend: string;
+    sharedItinerariesTitle: string;
     loginTitle: string;
     registerTitle: string;
     submit: string;
@@ -322,6 +349,33 @@ export const translations: Record<Language, TranslationDictionary> = {
       email: "Email",
       password: "Пароль",
       name: "Имя",
+      username: "Логин",
+      usernameHint: "3-20 символов: латинские буквы, цифры или подчёркивание",
+      editProfile: "Редактировать профиль",
+      save: "Сохранить",
+      profileUpdated: "Профиль обновлён",
+      hideFromSearch: "Не показывать меня в поиске друзей",
+      friendsTitle: "Друзья",
+      friendsSearchPlaceholder: "Поиск по логину",
+      friendsSearching: "Поиск…",
+      friendsNoResults: "Пользователи не найдены",
+      friendsAdd: "Добавить",
+      friendsAlreadyFriends: "Уже друзья",
+      friendsRequestSent: "Запрос отправлен",
+      friendsRespondBelow: "Ответьте ниже",
+      friendsIncomingTitle: "Заявки в друзья",
+      friendsAccept: "Принять",
+      friendsDecline: "Отклонить",
+      friendsOutgoingTitle: "Отправленные заявки",
+      friendsCancel: "Отменить",
+      friendsListTitle: "Ваши друзья",
+      friendsLoading: "Загрузка…",
+      friendsEmpty: "Пока нет друзей",
+      friendsRemove: "Удалить",
+      shareChecklist: "Поделиться",
+      sharedChecklistsTitle: "Чек-листы, которыми с вами поделились",
+      shareItineraryWithFriend: "Поделиться",
+      sharedItinerariesTitle: "Маршруты, которыми с вами поделились",
       loginTitle: "Вход",
       registerTitle: "Создать аккаунт",
       submit: "Продолжить",
@@ -566,6 +620,33 @@ export const translations: Record<Language, TranslationDictionary> = {
       email: "Email",
       password: "Password",
       name: "Name",
+      username: "Username",
+      usernameHint: "3-20 characters: letters, numbers, underscore",
+      editProfile: "Edit profile",
+      save: "Save",
+      profileUpdated: "Profile updated",
+      hideFromSearch: "Don't show me in friend search",
+      friendsTitle: "Friends",
+      friendsSearchPlaceholder: "Search by username",
+      friendsSearching: "Searching…",
+      friendsNoResults: "No users found",
+      friendsAdd: "Add",
+      friendsAlreadyFriends: "Already friends",
+      friendsRequestSent: "Request sent",
+      friendsRespondBelow: "Respond below",
+      friendsIncomingTitle: "Friend requests",
+      friendsAccept: "Accept",
+      friendsDecline: "Decline",
+      friendsOutgoingTitle: "Sent requests",
+      friendsCancel: "Cancel",
+      friendsListTitle: "Your friends",
+      friendsLoading: "Loading…",
+      friendsEmpty: "No friends yet",
+      friendsRemove: "Remove",
+      shareChecklist: "Share",
+      sharedChecklistsTitle: "Checklists shared with you",
+      shareItineraryWithFriend: "Share",
+      sharedItinerariesTitle: "Routes shared with you",
       loginTitle: "Sign in",
       registerTitle: "Create an account",
       submit: "Continue",
@@ -810,6 +891,33 @@ export const translations: Record<Language, TranslationDictionary> = {
       email: "メールアドレス",
       password: "パスワード",
       name: "名前",
+      username: "ユーザー名",
+      usernameHint: "3〜20文字:半角英数字とアンダースコア",
+      editProfile: "プロフィールを編集",
+      save: "保存",
+      profileUpdated: "プロフィールを更新しました",
+      hideFromSearch: "フレンド検索に表示しない",
+      friendsTitle: "フレンド",
+      friendsSearchPlaceholder: "ユーザー名で検索",
+      friendsSearching: "検索中…",
+      friendsNoResults: "ユーザーが見つかりません",
+      friendsAdd: "追加",
+      friendsAlreadyFriends: "フレンド済み",
+      friendsRequestSent: "リクエスト送信済み",
+      friendsRespondBelow: "下で対応してください",
+      friendsIncomingTitle: "フレンドリクエスト",
+      friendsAccept: "承認",
+      friendsDecline: "拒否",
+      friendsOutgoingTitle: "送信済みリクエスト",
+      friendsCancel: "取消",
+      friendsListTitle: "フレンド一覧",
+      friendsLoading: "読み込み中…",
+      friendsEmpty: "まだフレンドがいません",
+      friendsRemove: "削除",
+      shareChecklist: "共有",
+      sharedChecklistsTitle: "共有されたチェックリスト",
+      shareItineraryWithFriend: "共有",
+      sharedItinerariesTitle: "共有されたルート",
       loginTitle: "サインイン",
       registerTitle: "アカウント作成",
       submit: "続ける",

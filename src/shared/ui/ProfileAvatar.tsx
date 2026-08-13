@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { Text } from "@/shared/ui/AppText";
 import { avatarPresentation, isAvatarId } from "@/entities/user/model/avatars";
 
 type ProfileAvatarProps = {
