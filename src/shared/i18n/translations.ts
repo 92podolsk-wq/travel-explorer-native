@@ -103,8 +103,17 @@ type TranslationDictionary = {
     sharedChecklistsTitle: string;
     shareItineraryWithFriend: string;
     sharedItinerariesTitle: string;
+    heroTagline: string;
     loginTitle: string;
     registerTitle: string;
+    loginSubtitle: string;
+    registerSubtitle: string;
+    confirmPassword: string;
+    passwordMismatch: string;
+    continueWith: string;
+    comingSoon: string;
+    loginWithYandex: string;
+    yandexError: string;
     submit: string;
     switchToRegister: string;
     switchToLogin: string;
@@ -376,8 +385,17 @@ export const translations: Record<Language, TranslationDictionary> = {
       sharedChecklistsTitle: "Чек-листы, которыми с вами поделились",
       shareItineraryWithFriend: "Поделиться",
       sharedItinerariesTitle: "Маршруты, которыми с вами поделились",
+      heroTagline: "Открой. Исследуй. Запомни.",
       loginTitle: "Вход",
       registerTitle: "Создать аккаунт",
+      loginSubtitle: "С возвращением! Рады видеть вас снова.",
+      registerSubtitle: "Начните своё путешествие с Wayora",
+      confirmPassword: "Подтвердите пароль",
+      passwordMismatch: "Пароли не совпадают",
+      continueWith: "или продолжить через",
+      comingSoon: "Скоро будет доступно",
+      loginWithYandex: "Войти через Яндекс",
+      yandexError: "Не удалось войти через Яндекс.",
       submit: "Продолжить",
       switchToRegister: "Нет аккаунта? Зарегистрироваться",
       switchToLogin: "Уже есть аккаунт? Войти",
@@ -647,8 +665,17 @@ export const translations: Record<Language, TranslationDictionary> = {
       sharedChecklistsTitle: "Checklists shared with you",
       shareItineraryWithFriend: "Share",
       sharedItinerariesTitle: "Routes shared with you",
+      heroTagline: "Discover. Explore. Remember.",
       loginTitle: "Sign in",
       registerTitle: "Create an account",
+      loginSubtitle: "Welcome back! Good to see you again.",
+      registerSubtitle: "Start your journey with Wayora",
+      confirmPassword: "Confirm password",
+      passwordMismatch: "Passwords don't match",
+      continueWith: "or continue with",
+      comingSoon: "Coming soon",
+      loginWithYandex: "Sign in with Yandex",
+      yandexError: "Couldn't sign in with Yandex.",
       submit: "Continue",
       switchToRegister: "No account yet? Register",
       switchToLogin: "Already have an account? Log in",
@@ -918,8 +945,17 @@ export const translations: Record<Language, TranslationDictionary> = {
       sharedChecklistsTitle: "共有されたチェックリスト",
       shareItineraryWithFriend: "共有",
       sharedItinerariesTitle: "共有されたルート",
+      heroTagline: "見つける。めぐる。心に刻む。",
       loginTitle: "サインイン",
       registerTitle: "アカウント作成",
+      loginSubtitle: "おかえりなさい！",
+      registerSubtitle: "Wayoraで旅を始めましょう",
+      confirmPassword: "パスワード（確認）",
+      passwordMismatch: "パスワードが一致しません",
+      continueWith: "または次で続ける",
+      comingSoon: "近日公開",
+      loginWithYandex: "Yandexでログイン",
+      yandexError: "Yandexでのログインに失敗しました。",
       submit: "続ける",
       switchToRegister: "アカウントをお持ちでない方は登録",
       switchToLogin: "アカウントをお持ちの方はログイン",

@@ -96,6 +96,8 @@ android {
         versionName "1.0.0"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
+
+        manifestPlaceholders = [YANDEX_CLIENT_ID: "6857756e83a94852ba0680eacb25e1ed"]
     }
     signingConfigs {
         debug {

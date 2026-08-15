@@ -19,6 +19,14 @@ export function register(email: string, password: string, username: string, name
   });
 }
 
+export function loginWithYandex(yandexToken: string): Promise<AuthResponse> {
+  return apiJson<AuthResponse>("/api/auth/yandex", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: yandexToken })
+  });
+}
+
 export function getMe(): Promise<AuthMeResponse> {
   return apiJson<AuthMeResponse>("/api/auth/me");
 }

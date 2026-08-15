@@ -477,9 +477,18 @@ export function PoiDetailSheet({ poi: poiProp, onClose }: PoiDetailSheetProps) {
                 {t.app.minutesShort}
               </Text>
             </View>
+            <Text style={styles.quickMetaDot}>·</Text>
+            <View style={styles.quickMetaItem}>
+              <Ionicons name="camera-outline" size={14} color={colors.textSecondary} />
+              <Text style={styles.quickMetaLabel}>
+                {poi.photos.length} {t.app.photo}
+              </Text>
+            </View>
           </View>
 
           <View style={styles.content}>
+            {description ? <Text style={styles.description}>{description}</Text> : null}
+
             <View style={styles.actionsRow}>
               <AnimatedPressable
                 style={[styles.actionButton, isFavorite && styles.actionButtonActive]}
@@ -502,8 +511,6 @@ export function PoiDetailSheet({ poi: poiProp, onClose }: PoiDetailSheetProps) {
                 <Text style={[styles.actionLabel, isVisited && styles.actionLabelActive]}>{t.app.visited}</Text>
               </AnimatedPressable>
             </View>
-
-            {description ? <Text style={styles.description}>{description}</Text> : null}
 
             {bestTime.length > 0 ? (
               <View style={styles.section}>
@@ -751,7 +758,7 @@ function createStyles(colors: ThemeColors) {
   quickMetaLabel: { fontSize: 13, fontWeight: "600", color: colors.textSecondary, textTransform: "capitalize" },
   quickMetaDot: { fontSize: 13, color: colors.textTertiary },
   content: { padding: 18 },
-  actionsRow: { flexDirection: "row", gap: 0, marginBottom: 16 },
+  actionsRow: { flexDirection: "row", gap: 8, marginTop: 16 },
   actionButton: {
     flex: 1,
     flexDirection: "row",
@@ -760,7 +767,7 @@ function createStyles(colors: ThemeColors) {
     gap: 6,
     borderWidth: 1,
     borderColor: colors.primary,
-    borderRadius: 10,
+    borderRadius: 999,
     paddingVertical: 11
   },
   actionButtonActive: { backgroundColor: colors.primary },

@@ -38,13 +38,13 @@ import { CategoryFilterSheet } from "@/components/CategoryFilterSheet";
 import { RegionSwitcherModal } from "@/components/RegionSwitcherModal";
 import { PoiDetailSheet } from "@/components/PoiDetailSheet";
 import { PoiPreviewCard } from "@/components/map/PoiPreviewCard";
-import { MapMarkerSprites, customMarkerSpriteKey, poiSpriteKey } from "@/components/map/MapMarkerSprites";
+import { MapMarkerSprites, customMarkerSpriteKey, poiSpriteKey, poiVisitedSpriteKey } from "@/components/map/MapMarkerSprites";
+import { PulseMarker } from "@/components/map/PulseMarker";
 import { AddMarkerModal } from "@/components/map/AddMarkerModal";
 import { WeatherChips } from "@/components/map/WeatherChips";
 import { SeasonReminderBanner } from "@/components/map/SeasonReminderBanner";
 import { SwipeDiscoveryModal } from "@/widgets/swipe-discovery/SwipeDiscoveryModal";
 import { AnimatedPressable } from "@/components/AnimatedPressable";
-import { HankoSeal } from "@/shared/ui/HankoSeal";
 import { useTheme } from "@/shared/theme/useTheme";
 import type { ThemeColors } from "@/shared/theme/colors";
 
@@ -80,6 +80,7 @@ export function MapScreen() {
   const areas = useExplorerStore((state) => state.areas);
   const favorites = useExplorerStore((state) => state.favorites);
   const viewedPoiIds = useExplorerStore((state) => state.viewedPoiIds);
+  const visitedPoiIds = useExplorerStore((state) => state.visitedPoiIds);
   const toggleFavorite = useExplorerStore((state) => state.toggleFavorite);
   const markPoiViewed = useExplorerStore((state) => state.markPoiViewed);
   const isSwipeOpen = useExplorerStore((state) => state.isSwipeOpen);
@@ -253,6 +254,9 @@ export function MapScreen() {
   const visibleCategoryCount = useMemo(() => categories.filter((c) => !c.isHidden).length, [categories]);
   const poisById = useMemo(() => new Map(visiblePois.map((poi) => [poi.id, poi])), [visiblePois]);
   const previewPoi = previewPoiId ? poisById.get(previewPoiId) : undefined;
+  // Whichever POI is currently "focused" on the map — either the lightweight
+  // tap-preview or a fully opened detail sheet — gets the pulsing ring.
+  const highlightedPoi = previewPoi ?? selectedPoi;
 
   useEffect(() => {
     if (previewPoi) {
@@ -313,7 +317,8 @@ export function MapScreen() {
       .map((feature) => {
         const poiId = (feature.properties as { poiId: string }).poiId;
         const poi = poisById.get(poiId);
-        const iconKey = poi ? poiSpriteKey(poi.category) : "";
+        const isVisited = visitedPoiIds.includes(poiId);
+        const iconKey = poi ? (isVisited ? poiVisitedSpriteKey(poi.category) : poiSpriteKey(poi.category)) : "";
         return {
           type: "Feature" as const,
           geometry: feature.geometry,
@@ -321,7 +326,7 @@ export function MapScreen() {
         };
       })
       .filter((feature) => markerSpriteUris[feature.properties.iconKey] != null)
-  }), [mapClusters, poisById, markerSpriteUris]);
+  }), [mapClusters, poisById, markerSpriteUris, visitedPoiIds]);
 
   const clusterFeatureCollection = useMemo((): GeoJSON.FeatureCollection => ({
     type: "FeatureCollection",
@@ -451,6 +456,10 @@ export function MapScreen() {
           initialViewState={{ center: [activeRegion.center.lng, activeRegion.center.lat], zoom: activeRegion.defaultZoom }}
         />
         <UserLocation animated accuracy heading />
+        {position ? <PulseMarker lngLat={[position.coords.longitude, position.coords.latitude]} color="#3b82f6" /> : null}
+        {highlightedPoi ? (
+          <PulseMarker lngLat={[highlightedPoi.coordinates.lng, highlightedPoi.coordinates.lat]} color={colors.primary} />
+        ) : null}
 
         {Object.keys(markerSpriteUris).length > 0 ? <Images images={markerSpriteUris} /> : null}
 
@@ -561,7 +570,6 @@ export function MapScreen() {
               <Text style={styles.heroTitle} numberOfLines={1}>
                 {activeRegionName}
               </Text>
-              <HankoSeal character={activeRegion.sealCharacter} size={22} />
               <Ionicons name="chevron-down" size={16} color={colors.heroTextMuted} style={{ marginLeft: 2 }} />
             </TouchableOpacity>
 

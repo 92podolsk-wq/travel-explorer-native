@@ -16,6 +16,10 @@ export function poiSpriteKey(categoryId: string) {
   return `poi-${categoryId}`;
 }
 
+export function poiVisitedSpriteKey(categoryId: string) {
+  return `poi-${categoryId}-visited`;
+}
+
 export function customMarkerSpriteKey(color: string) {
   return `custom-${color}`;
 }
@@ -29,7 +33,7 @@ export function MapMarkerSprites({ categories, onReady }: MapMarkerSpritesProps)
   const viewRefs = useRef<Record<string, View | null>>({});
   const captureStarted = useRef<Record<string, boolean>>({});
   const results = useRef<Record<string, string>>({});
-  const total = categories.length + customMarkerColors.length;
+  const total = categories.length * 2 + customMarkerColors.length;
 
   const handleCaptured = useCallback(() => {
     if (Object.keys(results.current).length === total && total > 0) {
@@ -89,6 +93,25 @@ export function MapMarkerSprites({ categories, onReady }: MapMarkerSpritesProps)
           </View>
         );
       })}
+      {categories.map((category) => {
+        const key = poiVisitedSpriteKey(category.id);
+        return (
+          <View
+            key={key}
+            ref={(view) => {
+              viewRefs.current[key] = view;
+            }}
+            collapsable={false}
+            style={[styles.poiPin, { backgroundColor: category.color }]}
+            onLayout={() => handleLayout(key)}
+          >
+            <CategoryIcon icon={category.icon} size={13} />
+            <View style={styles.visitedBadge}>
+              <Ionicons name="checkmark" size={7} color="#ffffff" />
+            </View>
+          </View>
+        );
+      })}
       {customMarkerColors.map((color) => {
         const key = customMarkerSpriteKey(color);
         return (
@@ -125,6 +148,19 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     borderWidth: 2,
+    borderColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  visitedBadge: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    width: 11,
+    height: 11,
+    borderRadius: 5.5,
+    backgroundColor: "#287f72",
+    borderWidth: 1,
     borderColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center"
