@@ -3,7 +3,6 @@ import { StyleSheet, View } from "react-native";
 import { Text } from "@/shared/ui/AppText";
 import { Ionicons } from "@expo/vector-icons";
 import { getWeather, type WeatherResponse } from "@/shared/api/weather";
-import { getLocalTimeNow } from "@/shared/lib/sun-times";
 import { mapSevenTimerCode, weatherConditionIcons } from "@/shared/lib/weather-condition";
 import { useTranslations } from "@/shared/i18n/useTranslations";
 import { useTheme } from "@/shared/theme/useTheme";
@@ -21,7 +20,6 @@ export function WeatherChips({ regionId, latitude, longitude, timeZoneOffsetHour
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [weather, setWeather] = useState<WeatherResponse | null>(null);
-  const [localTime, setLocalTime] = useState(() => getLocalTimeNow(new Date(), timeZoneOffsetHours));
 
   useEffect(() => {
     let cancelled = false;
@@ -38,14 +36,6 @@ export function WeatherChips({ regionId, latitude, longitude, timeZoneOffsetHour
     };
   }, [regionId, latitude, longitude, timeZoneOffsetHours]);
 
-  useEffect(() => {
-    setLocalTime(getLocalTimeNow(new Date(), timeZoneOffsetHours));
-    const interval = setInterval(() => {
-      setLocalTime(getLocalTimeNow(new Date(), timeZoneOffsetHours));
-    }, 30_000);
-    return () => clearInterval(interval);
-  }, [timeZoneOffsetHours]);
-
   if (!weather) return null;
 
   const nowIcon = weatherConditionIcons[mapSevenTimerCode(weather.now.code)];
@@ -55,7 +45,6 @@ export function WeatherChips({ regionId, latitude, longitude, timeZoneOffsetHour
     <View style={styles.row}>
       <View style={styles.chip}>
         <Text style={styles.chipLabel}>{t.app.now}</Text>
-        <Text style={styles.chipLabel}>{localTime}</Text>
         <Ionicons name={nowIcon} size={12} color={colors.heroText} />
         <Text style={styles.chipValue}>{Math.round(weather.now.tempC)}°</Text>
       </View>

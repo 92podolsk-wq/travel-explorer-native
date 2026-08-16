@@ -32,8 +32,6 @@ export function PhotoViewerModal({ visible, photos, initialIndex, onClose }: Pho
   const [index, setIndex] = useState(initialIndex);
   const translateY = useSharedValue(0);
 
-  if (!visible) return null;
-
   // Swiping the photo itself up or down (not the horizontal photo-to-photo
   // swipe) dismisses the viewer, matching the bidirectional close gesture
   // already used on the map's POI preview card.
@@ -59,6 +57,13 @@ export function PhotoViewerModal({ visible, photos, initialIndex, onClose }: Pho
     transform: [{ translateY: translateY.value }],
     opacity: 1 - Math.min(1, Math.abs(translateY.value) / DISMISS_DISTANCE) * 0.6
   }));
+
+  // The early return must come after every hook above — bailing out before
+  // useAnimatedStyle would call a different number of hooks on the render
+  // where `visible` flips to true than on the renders before it, which
+  // crashes React with a "Rendered more hooks than during the previous
+  // render" error the instant this modal opens.
+  if (!visible) return null;
 
   return (
     <View style={styles.overlay}>
