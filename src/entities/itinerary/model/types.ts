@@ -9,6 +9,7 @@ export type ItineraryStopWithPoi = {
   position: number;
   point: ItineraryStopPoint;
   durationOverrideMinutes: number | null;
+  notes: string | null;
 };
 
 export type ItineraryDayInfo = {
@@ -18,6 +19,7 @@ export type ItineraryDayInfo = {
   lunchEnabled: boolean | null;
   lunchStartMinutes: number | null;
   lunchDurationMinutes: number | null;
+  notes: string | null;
 };
 
 export type Itinerary = {

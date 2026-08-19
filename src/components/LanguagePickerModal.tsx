@@ -9,14 +9,12 @@ import type { ThemeColors } from "@/shared/theme/colors";
 
 const LANGUAGE_OPTIONS: { value: Language; label: string }[] = [
   { value: "ru", label: "Русский" },
-  { value: "en", label: "English" },
-  { value: "ja", label: "日本語" }
+  { value: "en", label: "English" }
 ];
 
 export const LANGUAGE_LABELS: Record<Language, string> = {
   ru: "Русский",
-  en: "English",
-  ja: "日本語"
+  en: "English"
 };
 
 type LanguagePickerModalProps = {

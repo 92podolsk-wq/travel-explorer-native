@@ -8,7 +8,7 @@ type ProfileAvatarProps = {
 };
 
 export function ProfileAvatar({ avatarId, size = 40 }: ProfileAvatarProps) {
-  const resolved = avatarId && isAvatarId(avatarId) ? avatarId : "torii";
+  const resolved = avatarId && isAvatarId(avatarId) ? avatarId : "compass";
   const { emoji, color } = avatarPresentation[resolved];
 
   return (

@@ -4,6 +4,10 @@ export function hapticTap() {
   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 }
 
+export function hapticSoft() {
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft).catch(() => {});
+}
+
 export function hapticSelection() {
   Haptics.selectionAsync().catch(() => {});
 }

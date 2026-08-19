@@ -32,3 +32,16 @@ export function formatDistance(meters: number, unit: "km" | "mi" = "km"): string
   }
   return `${(meters / 1000).toFixed(1)} км`;
 }
+
+// Average adult step length is roughly 0.75m (a common rule of thumb: ~1300
+// steps per km) — good enough for a rough "how many steps is that" hint, not
+// meant to be precise.
+const METERS_PER_STEP = 0.75;
+
+export function estimateSteps(meters: number): number {
+  return Math.round(meters / METERS_PER_STEP);
+}
+
+export function formatSteps(meters: number): string {
+  return estimateSteps(meters).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+}

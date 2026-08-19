@@ -1,17 +1,23 @@
 import type { FriendUser } from "@/entities/user/model/types";
 import type { Itinerary } from "@/entities/itinerary/model/types";
-import type { SharedItinerarySummary } from "@/entities/sharing/model/types";
+import type { ItineraryShareRole, SharedItinerarySummary } from "@/entities/sharing/model/types";
 import { apiJson } from "./client";
 
-export function getItineraryShareTargets(itineraryId: string): Promise<{ users: FriendUser[] }> {
-  return apiJson<{ users: FriendUser[] }>(`/api/me/itineraries/${itineraryId}/shares`);
+export function getItineraryShareTargets(
+  itineraryId: string
+): Promise<{ users: (FriendUser & { role: ItineraryShareRole })[] }> {
+  return apiJson<{ users: (FriendUser & { role: ItineraryShareRole })[] }>(`/api/me/itineraries/${itineraryId}/shares`);
 }
 
-export function shareItineraryWithFriend(itineraryId: string, friendUserId: string): Promise<{ success: boolean }> {
+export function shareItineraryWithFriend(
+  itineraryId: string,
+  friendUserId: string,
+  role: ItineraryShareRole = "viewer"
+): Promise<{ success: boolean }> {
   return apiJson<{ success: boolean }>(`/api/me/itineraries/${itineraryId}/shares`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ friendUserId })
+    body: JSON.stringify({ friendUserId, role })
   });
 }
 

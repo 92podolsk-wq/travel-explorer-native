@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Switch, TouchableOpacity, View } from "react-native";
+import { Keyboard, StyleSheet, Switch, TouchableOpacity, View } from "react-native";
 import { Text } from "@/shared/ui/AppText";
 import { TextInput } from "@/shared/ui/AppTextInput";
 import { NestableDraggableFlatList } from "react-native-draggable-flatlist";
@@ -9,7 +9,7 @@ import type { ItineraryDayInfo, ItineraryStopWithPoi } from "@/entities/itinerar
 import { stopPointCoordinates } from "@/entities/itinerary/model/stop-point";
 import { buildDayTimeline, formatDurationLabel, formatMinutesAsTime, type DayTimelineEntry } from "@/entities/itinerary/model/timeline";
 import { computeItinerarySummary } from "@/entities/itinerary/model/summary";
-import { estimateTransitionMinutes, formatDistance, haversineDistanceMeters } from "@/shared/lib/geo";
+import { estimateTransitionMinutes, formatDistance, formatSteps, haversineDistanceMeters } from "@/shared/lib/geo";
 import { fetchWalkingRoute, type WalkingRoute } from "@/shared/lib/osrm-route";
 import type { DayConfigPatch } from "@/shared/api/itineraries";
 import { useTranslations } from "@/shared/i18n/useTranslations";
@@ -62,6 +62,7 @@ type ItineraryDayCardProps = {
   onReorder: (day: number, orderedStopIds: string[]) => void;
   onMoveStop: (stopId: string, targetDay: number) => void;
   onEditDuration: (stopId: string, minutes: number | null) => void;
+  onSetNotes: (stopId: string, notes: string | null) => void;
   onRemoveStop: (stopId: string) => void;
   onDeleteDay: (day: number) => void;
   onUpdateDayConfig: (day: number, patch: DayConfigPatch) => void;
@@ -75,6 +76,7 @@ export function ItineraryDayCard({
   onReorder,
   onMoveStop,
   onEditDuration,
+  onSetNotes,
   onRemoveStop,
   onDeleteDay,
   onUpdateDayConfig
@@ -88,6 +90,7 @@ export function ItineraryDayCard({
   const [titleDraft, setTitleDraft] = useState(day.title ?? "");
   const [route, setRoute] = useState<WalkingRoute | null>(null);
   const [movingStopId, setMovingStopId] = useState<string | null>(null);
+  const [notesDraft, setNotesDraft] = useState(day.notes ?? "");
 
   const startMinutes = day.startMinutes ?? 540;
   const points = useMemo(() => stops.map((s) => s.point), [stops]);
@@ -161,8 +164,8 @@ export function ItineraryDayCard({
             </TouchableOpacity>
           )}
           <Text style={styles.stats}>
-            {t.auth.dayPlaceCount.replace("{count}", String(stops.length))} · {formatDistance(summary.walkingDistanceMeters, distanceUnit)}{" "}
-            ·{" "}
+            {t.auth.dayPlaceCount.replace("{count}", String(stops.length))} · {formatDistance(summary.walkingDistanceMeters, distanceUnit)}
+            {" "}({t.auth.stepsApprox.replace("{count}", formatSteps(summary.walkingDistanceMeters))}) ·{" "}
             {formatDurationLabel(summary.totalMinutes, t.auth.hourUnit, t.app.minutesShort)}
           </Text>
         </View>
@@ -206,6 +209,26 @@ export function ItineraryDayCard({
             ) : null}
           </View>
 
+          <TextInput
+            style={styles.dayNotesInput}
+            value={notesDraft}
+            onChangeText={setNotesDraft}
+            onBlur={() => onUpdateDayConfig(day.day, { notes: notesDraft.trim() ? notesDraft.trim() : null })}
+            placeholder={t.auth.dayNotesPlaceholder}
+            placeholderTextColor={colors.textTertiary}
+            multiline
+          />
+          <TouchableOpacity
+            style={styles.dayNotesDoneButton}
+            onPress={() => {
+              onUpdateDayConfig(day.day, { notes: notesDraft.trim() ? notesDraft.trim() : null });
+              Keyboard.dismiss();
+            }}
+          >
+            <Ionicons name="checkmark" size={14} color={colors.textInverse} />
+            <Text style={styles.dayNotesDoneLabel}>{t.auth.notesDone}</Text>
+          </TouchableOpacity>
+
           <NestableDraggableFlatList
             data={stops}
             keyExtractor={(item) => item.id}
@@ -222,6 +245,7 @@ export function ItineraryDayCard({
                   travelToNext={extra?.travelToNext ?? null}
                   lunchAfter={extra?.lunchAfter ?? null}
                   onEditDuration={(minutes) => onEditDuration(item.id, minutes)}
+                  onSetNotes={(notes) => onSetNotes(item.id, notes)}
                   onRemove={() => onRemoveStop(item.id)}
                   onMoveToDay={() => setMovingStopId(item.id)}
                   onDrag={drag}
@@ -283,6 +307,30 @@ function createStyles(colors: ThemeColors) {
     startValue: { fontSize: 13, fontWeight: "700", color: colors.textPrimary, minWidth: 42, textAlign: "center" },
     lunchRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 8 },
     lunchDetail: { fontSize: 11, color: "#a87a2e" },
+    dayNotesInput: {
+      fontSize: 13,
+      color: colors.textPrimary,
+      backgroundColor: colors.background,
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      marginBottom: 10,
+      minHeight: 40,
+      textAlignVertical: "top"
+    },
+    dayNotesDoneButton: {
+      alignSelf: "flex-end",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      marginTop: -6,
+      marginBottom: 10,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      backgroundColor: colors.primary
+    },
+    dayNotesDoneLabel: { fontSize: 11, fontWeight: "700", color: colors.textInverse },
     modalCard: { backgroundColor: colors.surface, borderRadius: 16, padding: 16 },
     modalTitle: { fontSize: 16, fontWeight: "700", marginBottom: 8, color: colors.textPrimary },
     modalRow: { paddingVertical: 12, paddingHorizontal: 8, borderRadius: 10 },

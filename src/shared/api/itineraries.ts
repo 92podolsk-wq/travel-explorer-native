@@ -47,6 +47,7 @@ export type DayConfigPatch = {
   lunchEnabled?: boolean | null;
   lunchStartMinutes?: number | null;
   lunchDurationMinutes?: number | null;
+  notes?: string | null;
 };
 
 export function updateItineraryDay(itineraryId: string, day: number, patch: DayConfigPatch): Promise<Itinerary> {
@@ -95,7 +96,7 @@ export function removeItineraryStop(itineraryId: string, stopId: string): Promis
 export function updateItineraryStop(
   itineraryId: string,
   stopId: string,
-  patch: { day?: number; durationOverrideMinutes?: number | null }
+  patch: { day?: number; durationOverrideMinutes?: number | null; notes?: string | null }
 ): Promise<Itinerary> {
   return apiJson<Itinerary>(`/api/me/itineraries/${itineraryId}/stops/${stopId}`, {
     method: "PATCH",

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getItinerary, listItineraries } from "@/shared/api/itineraries";
+import { getItinerariesSharedWithMe } from "@/shared/api/itinerary-shares";
 import { useExplorerStore } from "./explorer-store";
 
 // Both the Route screen and the Favorites screen need the active itinerary
@@ -13,6 +14,7 @@ export function useEnsureItineraryLoaded() {
   const setItineraries = useExplorerStore((state) => state.setItineraries);
   const setActiveItineraryId = useExplorerStore((state) => state.setActiveItineraryId);
   const setItinerary = useExplorerStore((state) => state.setItinerary);
+  const setSharedEditableItineraries = useExplorerStore((state) => state.setSharedEditableItineraries);
 
   const [isLoading, setIsLoading] = useState(itineraries.length === 0);
 
@@ -22,6 +24,15 @@ export function useEnsureItineraryLoaded() {
       return;
     }
     let cancelled = false;
+    getItinerariesSharedWithMe()
+      .then((body) => {
+        if (cancelled) return;
+        const editable = body.itineraries
+          .filter((entry) => entry.role === "editor")
+          .map((entry) => ({ ...entry.itinerary, ownerName: entry.owner.name || `@${entry.owner.username}` }));
+        setSharedEditableItineraries(editable);
+      })
+      .catch(() => {});
     listItineraries()
       .then(async (list) => {
         if (cancelled) return;

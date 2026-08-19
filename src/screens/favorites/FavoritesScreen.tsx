@@ -40,7 +40,7 @@ export function FavoritesScreen() {
   const clearVisitedPois = useExplorerStore((state) => state.clearVisitedPois);
   const clearViewedPois = useExplorerStore((state) => state.clearViewedPois);
   const setSelectedPoiId = useExplorerStore((state) => state.setSelectedPoiId);
-  const setActiveRegionId = useExplorerStore((state) => state.setActiveRegionId);
+  const setActiveRegion = useExplorerStore((state) => state.setActiveRegion);
   const itinerary = useExplorerStore((state) => state.itinerary);
   const setItinerary = useExplorerStore((state) => state.setItinerary);
 
@@ -87,7 +87,7 @@ export function FavoritesScreen() {
 
   function goToPoi(poiId: string) {
     const poi = pois.find((p) => p.id === poiId);
-    if (poi) setActiveRegionId(poi.regionId);
+    if (poi) setActiveRegion(poi.regionId);
     setSelectedPoiId(poiId);
     navigation.navigate("Map");
   }

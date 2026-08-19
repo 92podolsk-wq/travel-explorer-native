@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, Share, StyleSheet, TouchableOpacity, View } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { Text } from "@/shared/ui/AppText";
 import { TextInput } from "@/shared/ui/AppTextInput";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -8,9 +9,11 @@ import { NestableScrollContainer } from "react-native-draggable-flatlist";
 import { useTranslations } from "@/shared/i18n/useTranslations";
 import { useExplorerStore } from "@/shared/model/explorer-store";
 import { API_ORIGIN } from "@/shared/api/client";
+import { getToken } from "@/shared/storage/token-storage";
 import { useEnsureItineraryLoaded } from "@/shared/model/use-ensure-itinerary";
 import {
   addItineraryDay,
+  addItineraryStop,
   clearItineraryStops,
   createItinerary,
   deleteItinerary,
@@ -27,6 +30,7 @@ import {
   type DayConfigPatch
 } from "@/shared/api/itineraries";
 import { ItineraryDayCard } from "@/components/itinerary/ItineraryDayCard";
+import { AddStopModal } from "@/components/itinerary/AddStopModal";
 import { AnimatedListItem } from "@/components/AnimatedListItem";
 import { ItineraryGeneratorModal } from "@/components/itinerary/ItineraryGeneratorModal";
 import { saveWidgetTripSummary } from "@/shared/storage/widget-trip-summary";
@@ -37,6 +41,7 @@ import { ProfileAvatar } from "@/shared/ui/ProfileAvatar";
 import { getFriends } from "@/shared/api/friends";
 import { getItineraryShareTargets, shareItineraryWithFriend, unshareItineraryWithFriend } from "@/shared/api/itinerary-shares";
 import type { FriendUser } from "@/entities/user/model/types";
+import type { ItineraryShareRole } from "@/entities/sharing/model/types";
 
 export function RouteScreen() {
   const t = useTranslations();
@@ -47,21 +52,28 @@ export function RouteScreen() {
   const openAuthModal = useExplorerStore((state) => state.openAuthModal);
   const regions = useExplorerStore((state) => state.regions);
   const itineraries = useExplorerStore((state) => state.itineraries);
+  const sharedEditableItineraries = useExplorerStore((state) => state.sharedEditableItineraries);
   const activeItineraryId = useExplorerStore((state) => state.activeItineraryId);
   const itinerary = useExplorerStore((state) => state.itinerary);
   const setItineraries = useExplorerStore((state) => state.setItineraries);
   const setActiveItineraryId = useExplorerStore((state) => state.setActiveItineraryId);
   const setItinerary = useExplorerStore((state) => state.setItinerary);
+  const isOwnedItinerary = itineraries.some((i) => i.id === activeItineraryId);
 
   const { isLoading: isLoadingList } = useEnsureItineraryLoaded();
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
+  const [isAddStopOpen, setIsAddStopOpen] = useState(false);
+  const [presenceUsers, setPresenceUsers] = useState<
+    { id: string; name: string | null; username: string; avatarId: string | null }[]
+  >([]);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const currentUser = useExplorerStore((state) => state.currentUser);
+  const otherPresenceUsers = presenceUsers.filter((u) => u.id !== currentUser?.id);
   const [isFriendShareOpen, setIsFriendShareOpen] = useState(false);
   const [shareFriends, setShareFriends] = useState<FriendUser[]>([]);
-  const [itineraryShareTargetIds, setItineraryShareTargetIds] = useState<Set<string>>(new Set());
+  const [itineraryShareRoles, setItineraryShareRoles] = useState<Map<string, ItineraryShareRole>>(new Map());
   const [pendingShareId, setPendingShareId] = useState<string | null>(null);
 
   function openItineraryFriendShare() {
@@ -70,7 +82,9 @@ export function RouteScreen() {
     if (shareFriends.length === 0) {
       getFriends().then((body) => setShareFriends(body.friends.map((entry) => entry.user)));
     }
-    getItineraryShareTargets(itinerary.id).then((body) => setItineraryShareTargetIds(new Set(body.users.map((user) => user.id))));
+    getItineraryShareTargets(itinerary.id).then((body) =>
+      setItineraryShareRoles(new Map(body.users.map((user) => [user.id, user.role])))
+    );
   }
 
   async function toggleItineraryFriendShare(friendId: string, isShared: boolean) {
@@ -79,15 +93,26 @@ export function RouteScreen() {
     try {
       if (isShared) {
         await unshareItineraryWithFriend(itinerary.id, friendId);
-        setItineraryShareTargetIds((prev) => {
-          const next = new Set(prev);
+        setItineraryShareRoles((prev) => {
+          const next = new Map(prev);
           next.delete(friendId);
           return next;
         });
       } else {
-        await shareItineraryWithFriend(itinerary.id, friendId);
-        setItineraryShareTargetIds((prev) => new Set(prev).add(friendId));
+        await shareItineraryWithFriend(itinerary.id, friendId, "viewer");
+        setItineraryShareRoles((prev) => new Map(prev).set(friendId, "viewer"));
       }
+    } finally {
+      setPendingShareId(null);
+    }
+  }
+
+  async function setItineraryFriendRole(friendId: string, role: ItineraryShareRole) {
+    if (!itinerary) return;
+    setPendingShareId(friendId);
+    try {
+      await shareItineraryWithFriend(itinerary.id, friendId, role);
+      setItineraryShareRoles((prev) => new Map(prev).set(friendId, role));
     } finally {
       setPendingShareId(null);
     }
@@ -97,6 +122,92 @@ export function RouteScreen() {
     if (!itinerary) return;
     saveWidgetTripSummary({ title: itinerary.title, startDate: itinerary.startDate }).then(refreshTripCountdownWidget);
   }, [itinerary]);
+
+  // Companions co-editing the same shared itinerary see each other's changes
+  // via the WebSocket below almost instantly; this refetch-on-focus + slow
+  // poll is just the fallback for whenever the socket is down (e.g. briefly
+  // backgrounded on mobile), so the trip still stays in sync without a
+  // manual restart.
+  useFocusEffect(
+    useCallback(() => {
+      if (!activeItineraryId) return;
+      let cancelled = false;
+      const refresh = () => {
+        getItinerary(activeItineraryId)
+          .then((full) => {
+            if (!cancelled) setItinerary(full);
+          })
+          .catch(() => {});
+      };
+      refresh();
+      const interval = setInterval(refresh, 45000);
+      return () => {
+        cancelled = true;
+        clearInterval(interval);
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeItineraryId])
+  );
+
+  useEffect(() => {
+    const itineraryId = activeItineraryId;
+    if (!itineraryId) return;
+    let cancelled = false;
+    let socket: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // RN's WebSocket supports a 3rd `{ headers }` argument for custom
+    // headers (used here for the bearer token) — a runtime extension the
+    // standard lib's WebSocket type doesn't know about.
+    const RNWebSocket = WebSocket as unknown as new (
+      url: string,
+      protocols: undefined,
+      options: { headers: Record<string, string> }
+    ) => WebSocket;
+
+    const connect = async () => {
+      if (cancelled) return;
+      const token = await getToken();
+      if (!token || cancelled) return;
+
+      socket = new RNWebSocket(`${API_ORIGIN.replace("https:", "wss:").replace("http:", "ws:")}/realtime`, undefined, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      socket.onopen = () => {
+        socket?.send(JSON.stringify({ type: "subscribe", itineraryId }));
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data as string);
+          if (message.type === "itinerary:updated" && message.itineraryId === itineraryId) {
+            getItinerary(itineraryId).then((full) => {
+              if (!cancelled) setItinerary(full);
+            });
+          } else if (message.type === "presence" && message.itineraryId === itineraryId) {
+            if (!cancelled) setPresenceUsers(message.users);
+          }
+        } catch {
+          // ignore malformed frames
+        }
+      };
+
+      socket.onclose = () => {
+        if (!cancelled) setPresenceUsers([]);
+        if (!cancelled) reconnectTimer = setTimeout(connect, 3000);
+      };
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      socket?.close();
+      setPresenceUsers([]);
+    };
+  }, [activeItineraryId]);
 
   async function handleStartDateChange(event: { type: string }, selectedDate?: Date) {
     setIsDatePickerOpen(false);
@@ -223,15 +334,25 @@ export function RouteScreen() {
     setItinerary(await updateItineraryStop(itinerary.id, stopId, { durationOverrideMinutes: minutes }));
   }
 
+  async function handleSetStopNotes(stopId: string, notes: string | null) {
+    if (!itinerary) return;
+    setItinerary(await updateItineraryStop(itinerary.id, stopId, { notes }));
+  }
+
   async function handleRemoveStop(stopId: string) {
     if (!itinerary) return;
     setItinerary(await removeItineraryStop(itinerary.id, stopId));
   }
 
+  async function handleAddStop(poiId: string) {
+    if (!itinerary) return;
+    setItinerary(await addItineraryStop(itinerary.id, { poiId }));
+  }
+
   if (authStatus === "guest") {
     return (
       <View style={styles.centered}>
-        <Ionicons name="navigate-outline" size={32} color={colors.textTertiary} style={{ marginBottom: 10 }} />
+        <Ionicons name="trail-sign-outline" size={32} color={colors.textTertiary} style={{ marginBottom: 10 }} />
         <Text style={styles.emptyTitle}>{t.auth.guestPrompt}</Text>
         <TouchableOpacity style={styles.primaryButton} onPress={openAuthModal}>
           <Text style={styles.primaryButtonLabel}>{t.auth.login}</Text>
@@ -263,6 +384,27 @@ export function RouteScreen() {
               </Text>
             </TouchableOpacity>
           ))}
+          {sharedEditableItineraries.map((summary) => (
+            <TouchableOpacity
+              key={summary.id}
+              style={[
+                styles.switcherChip,
+                styles.switcherChipShared,
+                summary.id === activeItineraryId && styles.switcherChipActive
+              ]}
+              onPress={() => handleSwitchItinerary(summary.id)}
+            >
+              <Ionicons
+                name="people"
+                size={12}
+                color={summary.id === activeItineraryId ? colors.textInverse : colors.textSecondary}
+                style={{ marginRight: 4 }}
+              />
+              <Text style={[styles.switcherChipLabel, summary.id === activeItineraryId && styles.switcherChipLabelActive]} numberOfLines={1}>
+                {summary.title}
+              </Text>
+            </TouchableOpacity>
+          ))}
           <TouchableOpacity style={styles.addItineraryButton} onPress={handleCreateItinerary}>
             <Ionicons name="add" size={18} color={colors.primary} />
           </TouchableOpacity>
@@ -284,7 +426,8 @@ export function RouteScreen() {
                 <Text style={styles.friendShareEmpty}>{t.auth.friendsEmpty}</Text>
               ) : (
                 shareFriends.map((friend) => {
-                  const isShared = itineraryShareTargetIds.has(friend.id);
+                  const role = itineraryShareRoles.get(friend.id);
+                  const isShared = role !== undefined;
                   return (
                     <View key={friend.id} style={styles.friendShareRow}>
                       <View style={styles.friendShareUser}>
@@ -293,6 +436,21 @@ export function RouteScreen() {
                           {friend.name || `@${friend.username}`}
                         </Text>
                       </View>
+                      {isShared ? (
+                        <TouchableOpacity
+                          style={role === "editor" ? styles.friendShareEditorButtonActive : styles.friendShareEditorButton}
+                          onPress={() => void setItineraryFriendRole(friend.id, role === "editor" ? "viewer" : "editor")}
+                          disabled={pendingShareId === friend.id}
+                        >
+                          <Text
+                            style={
+                              role === "editor" ? styles.friendShareEditorButtonLabelActive : styles.friendShareEditorButtonLabel
+                            }
+                          >
+                            {t.auth.itineraryShareCanEdit}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
                       <TouchableOpacity
                         style={isShared ? styles.friendShareSecondaryButton : styles.friendSharePrimaryButton}
                         onPress={() => void toggleItineraryFriendShare(friend.id, isShared)}
@@ -334,15 +492,24 @@ export function RouteScreen() {
                 <Ionicons name="pencil" size={14} color={colors.textTertiary} />
               </TouchableOpacity>
             )}
+            {otherPresenceUsers.length > 0 ? (
+              <View style={styles.presenceStack}>
+                {otherPresenceUsers.slice(0, 3).map((u) => (
+                  <View key={u.id} style={styles.presenceAvatar}>
+                    <ProfileAvatar avatarId={u.avatarId} size={22} />
+                  </View>
+                ))}
+              </View>
+            ) : null}
             <TouchableOpacity onPress={handleShareItinerary} style={styles.iconButton}>
               <Ionicons name="share-social-outline" size={18} color={colors.icon} />
             </TouchableOpacity>
-            {currentUser ? (
+            {currentUser && isOwnedItinerary ? (
               <TouchableOpacity onPress={openItineraryFriendShare} style={styles.iconButton}>
                 <Ionicons name="person-add-outline" size={18} color={colors.icon} />
               </TouchableOpacity>
             ) : null}
-            {itineraries.length > 1 ? (
+            {isOwnedItinerary && itineraries.length > 1 ? (
               <TouchableOpacity onPress={handleDeleteItinerary} style={styles.iconButton}>
                 <Ionicons name="trash-outline" size={18} color={colors.danger} />
               </TouchableOpacity>
@@ -400,6 +567,7 @@ export function RouteScreen() {
                     onReorder={handleReorder}
                     onMoveStop={handleMoveStop}
                     onEditDuration={handleEditDuration}
+                    onSetNotes={handleSetStopNotes}
                     onRemoveStop={handleRemoveStop}
                     onDeleteDay={handleDeleteDay}
                     onUpdateDayConfig={handleUpdateDayConfig}
@@ -408,12 +576,26 @@ export function RouteScreen() {
               ))
           )}
 
+          <TouchableOpacity style={styles.addLocationButton} onPress={() => setIsAddStopOpen(true)}>
+            <Ionicons name="add" size={16} color={colors.textInverse} />
+            <Text style={styles.addLocationLabel}>{t.auth.addLocation}</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.addDayButton} onPress={handleAddDay}>
             <Ionicons name="add" size={16} color={colors.primary} />
             <Text style={styles.addDayLabel}>{t.auth.addDay}</Text>
           </TouchableOpacity>
         </NestableScrollContainer>
       )}
+
+      <AddStopModal
+        visible={isAddStopOpen}
+        existingPoiIds={
+          new Set(itinerary?.stops.map((s) => s.point.kind === "poi" && s.point.poi.id).filter((id): id is string => !!id) ?? [])
+        }
+        onSelect={handleAddStop}
+        onClose={() => setIsAddStopOpen(false)}
+      />
 
       <ItineraryGeneratorModal
         visible={isGeneratorOpen}
@@ -437,6 +619,7 @@ function createStyles(colors: ThemeColors) {
     header: { paddingTop: 50, paddingBottom: 8, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.divider },
     switcherRow: { paddingHorizontal: 12, gap: 8, alignItems: "center" },
     switcherChip: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, maxWidth: 160 },
+    switcherChipShared: { flexDirection: "row", alignItems: "center" },
     switcherChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
     switcherChipLabel: { fontSize: 13, fontWeight: "600", color: colors.textSecondary },
     switcherChipLabelActive: { color: colors.textInverse },
@@ -455,6 +638,13 @@ function createStyles(colors: ThemeColors) {
     itineraryTitle: { fontSize: 20, fontWeight: "800", color: colors.textPrimary },
     titleInput: { flex: 1, fontSize: 20, fontWeight: "800", color: colors.textPrimary, borderBottomWidth: 1, borderBottomColor: colors.primary },
     iconButton: { padding: 6 },
+    presenceStack: { flexDirection: "row" },
+    presenceAvatar: {
+      marginLeft: -8,
+      borderRadius: 12,
+      borderWidth: 2,
+      borderColor: colors.surface
+    },
     friendShareCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 10, marginBottom: 12, gap: 8 },
     friendShareEmpty: { fontSize: 12, color: colors.textTertiary },
     friendShareRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
@@ -470,6 +660,16 @@ function createStyles(colors: ThemeColors) {
       borderColor: colors.border
     },
     friendShareSecondaryButtonLabel: { fontSize: 11, fontWeight: "700", color: colors.textSecondary },
+    friendShareEditorButton: {
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderWidth: 1,
+      borderColor: colors.border
+    },
+    friendShareEditorButtonLabel: { fontSize: 11, fontWeight: "700", color: colors.textTertiary },
+    friendShareEditorButtonActive: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: colors.primary },
+    friendShareEditorButtonLabelActive: { fontSize: 11, fontWeight: "700", color: colors.textInverse },
     startDateRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -507,6 +707,17 @@ function createStyles(colors: ThemeColors) {
       paddingVertical: 12,
       marginTop: 4
     },
-    addDayLabel: { fontSize: 13, fontWeight: "700", color: colors.primary }
+    addDayLabel: { fontSize: 13, fontWeight: "700", color: colors.primary },
+    addLocationButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      backgroundColor: colors.primary,
+      borderRadius: 12,
+      paddingVertical: 12,
+      marginTop: 10
+    },
+    addLocationLabel: { fontSize: 13, fontWeight: "700", color: colors.textInverse }
   });
 }

@@ -12,6 +12,7 @@ import { ApiError } from "@/shared/api/client";
 import { AnimatedCenterModal } from "@/components/AnimatedModal";
 import { registerPushTokenApi, unregisterPushTokenApi } from "@/shared/api/push-notifications";
 import { useTranslations } from "@/shared/i18n/useTranslations";
+import { formatLastSeen } from "@/shared/lib/format-last-seen";
 import {
   clearAllOfflinePhotoCache,
   deleteRegionOffline,
@@ -49,7 +50,6 @@ export function ProfileScreen() {
   const setThemeMode = useExplorerStore((state) => state.setThemeMode);
   const distanceUnit = useExplorerStore((state) => state.distanceUnit);
   const setDistanceUnit = useExplorerStore((state) => state.setDistanceUnit);
-  const setAvatarId = useExplorerStore((state) => state.setAvatarId);
   const logout = useExplorerStore((state) => state.logout);
   const regions = useExplorerStore((state) => state.regions);
   const pois = useExplorerStore((state) => state.pois);
@@ -93,9 +93,14 @@ export function ProfileScreen() {
   );
 
   async function handleSelectAvatar(avatarId: string) {
-    setAvatarId(avatarId);
-    setIsAvatarPickerOpen(false);
-    updateAvatar(avatarId).catch(() => {});
+    try {
+      const { user } = await updateAvatar(avatarId);
+      hydrateAuth(user);
+      setIsAvatarPickerOpen(false);
+    } catch (err) {
+      const serverMessage = err instanceof ApiError && (err.body as { error?: string } | null)?.error;
+      Alert.alert(t.auth.registerError, serverMessage || undefined);
+    }
   }
 
   function handleStartEditProfile() {
@@ -284,6 +289,7 @@ export function ProfileScreen() {
               <View style={styles.avatarRing}>
                 <ProfileAvatar avatarId={currentUser.avatarId} size={60} />
               </View>
+              {currentUser.isOnline ? <View style={styles.onlineDot} /> : null}
               <View style={styles.editBadge}>
                 <Ionicons name="pencil" size={10} color={colors.textInverse} />
               </View>
@@ -297,6 +303,10 @@ export function ProfileScreen() {
                 <Ionicons name="pencil" size={11} color={colors.heroTextMuted} />
               </View>
               <Text style={styles.email}>@{currentUser.username}</Text>
+              <View style={styles.statusRow}>
+                {currentUser.isOnline ? <View style={styles.statusDot} /> : null}
+                <Text style={styles.statusText}>{formatLastSeen(currentUser.lastSeenAt, currentUser.isOnline, language)}</Text>
+              </View>
             </TouchableOpacity>
           </View>
         ) : (
@@ -321,13 +331,13 @@ export function ProfileScreen() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Ionicons name="location-outline" size={18} color={colors.primary} />
+            <Ionicons name="map-outline" size={18} color={colors.primary} />
             <Text style={styles.statValue}>{visitedPoiIds.length}</Text>
             <Text style={styles.statLabel}>{t.app.visited}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Ionicons name="map-outline" size={18} color={colors.primary} />
+            <Ionicons name="trail-sign-outline" size={18} color={colors.primary} />
             <Text style={styles.statValue}>{itineraries.length}</Text>
             <Text style={styles.statLabel}>{t.auth.statsRoutes}</Text>
           </View>
@@ -626,6 +636,20 @@ function createStyles(colors: ThemeColors) {
     header: { alignItems: "center" },
     avatarTouchable: { position: "relative" },
     avatarRing: { borderRadius: 34, borderWidth: 2, borderColor: "rgba(255,255,255,0.5)", padding: 2 },
+    onlineDot: {
+      position: "absolute",
+      left: 2,
+      bottom: 2,
+      width: 12,
+      height: 12,
+      borderRadius: 6,
+      backgroundColor: "#34d399",
+      borderWidth: 2,
+      borderColor: colors.heroGradientStart
+    },
+    statusRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 1 },
+    statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#34d399" },
+    statusText: { fontSize: 11, color: colors.heroTextMuted },
     editBadge: {
       position: "absolute",
       right: -2,

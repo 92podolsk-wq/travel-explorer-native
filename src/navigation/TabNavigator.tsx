@@ -22,7 +22,7 @@ export const navigationRef = createNavigationContainerRef<TabParamList>();
 
 const TAB_ICONS: Record<keyof TabParamList, { focused: keyof typeof Ionicons.glyphMap; unfocused: keyof typeof Ionicons.glyphMap }> = {
   Map: { focused: "map", unfocused: "map-outline" },
-  Route: { focused: "navigate", unfocused: "navigate-outline" },
+  Route: { focused: "trail-sign", unfocused: "trail-sign-outline" },
   Favorites: { focused: "bookmark", unfocused: "bookmark-outline" },
   Profile: { focused: "person", unfocused: "person-outline" }
 };

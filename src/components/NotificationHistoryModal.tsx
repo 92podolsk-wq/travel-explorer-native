@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { FlatList, StyleSheet, TouchableOpacity, View } from "react-native";
+import { GestureHandlerRootView, Swipeable } from "react-native-gesture-handler";
 import { Text } from "@/shared/ui/AppText";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslations } from "@/shared/i18n/useTranslations";
@@ -7,8 +8,10 @@ import { AnimatedBottomSheet } from "@/components/AnimatedModal";
 import { useTheme } from "@/shared/theme/useTheme";
 import type { ThemeColors } from "@/shared/theme/colors";
 import {
+  clearNotificationHistory,
   getNotificationHistory,
   markAllNotificationsRead,
+  removeNotificationHistoryEntry,
   type NotificationHistoryEntry
 } from "@/shared/storage/notification-history";
 
@@ -39,14 +42,32 @@ export function NotificationHistoryModal({ visible, onClose }: NotificationHisto
     markAllNotificationsRead().catch(() => {});
   }, [visible]);
 
+  async function handleRemove(id: string) {
+    setEntries((prev) => prev.filter((entry) => entry.id !== id));
+    await removeNotificationHistoryEntry(id).catch(() => {});
+  }
+
+  async function handleClearAll() {
+    setEntries([]);
+    await clearNotificationHistory().catch(() => {});
+  }
+
   return (
     <AnimatedBottomSheet visible={visible} onClose={onClose} backdropColor={colors.overlay} contentStyle={styles.sheet}>
+      <GestureHandlerRootView style={styles.gestureRoot}>
         <View style={styles.handle} />
         <View style={styles.headerRow}>
           <Text style={styles.title}>{t.auth.notificationHistoryTitle}</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={10}>
-            <Ionicons name="close" size={22} color={colors.icon} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            {entries.length > 0 ? (
+              <TouchableOpacity onPress={() => void handleClearAll()} hitSlop={10} style={styles.clearAllButton}>
+                <Text style={styles.clearAllLabel}>{t.auth.notificationHistoryClearAll}</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity onPress={onClose} hitSlop={10}>
+              <Ionicons name="close" size={22} color={colors.icon} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {entries.length === 0 ? (
@@ -60,19 +81,30 @@ export function NotificationHistoryModal({ visible, onClose }: NotificationHisto
             keyExtractor={(entry) => entry.id}
             contentContainerStyle={styles.listContent}
             renderItem={({ item }) => (
-              <View style={styles.row}>
-                <View style={styles.rowIcon}>
-                  <Ionicons name="location" size={14} color={colors.primary} />
+              <Swipeable
+                renderRightActions={() => (
+                  <TouchableOpacity style={styles.deleteAction} onPress={() => void handleRemove(item.id)}>
+                    <Ionicons name="trash-outline" size={18} color="#fff" />
+                    <Text style={styles.deleteActionLabel}>{t.auth.notificationHistoryDelete}</Text>
+                  </TouchableOpacity>
+                )}
+                overshootRight={false}
+              >
+                <View style={styles.row}>
+                  <View style={styles.rowIcon}>
+                    <Ionicons name="location" size={14} color={colors.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowTitle}>{item.title}</Text>
+                    <Text style={styles.rowBody}>{item.body}</Text>
+                    <Text style={styles.rowTime}>{formatTimestamp(item.receivedAt)}</Text>
+                  </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.rowTitle}>{item.title}</Text>
-                  <Text style={styles.rowBody}>{item.body}</Text>
-                  <Text style={styles.rowTime}>{formatTimestamp(item.receivedAt)}</Text>
-                </View>
-              </View>
+              </Swipeable>
             )}
           />
         )}
+      </GestureHandlerRootView>
     </AnimatedBottomSheet>
   );
 }
@@ -91,9 +123,13 @@ function createStyles(colors: ThemeColors) {
       paddingTop: 10,
       paddingBottom: 24
     },
+    gestureRoot: { flexShrink: 1 },
     handle: { alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: "#ddd", marginBottom: 12 },
     headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18 },
+    headerActions: { flexDirection: "row", alignItems: "center", gap: 14 },
     title: { fontSize: 17, fontWeight: "800", color: colors.textPrimary },
+    clearAllButton: { paddingVertical: 4 },
+    clearAllLabel: { fontSize: 12, fontWeight: "700", color: colors.danger },
     empty: { alignItems: "center", justifyContent: "center", paddingVertical: 50, gap: 10 },
     emptyLabel: { fontSize: 13, color: colors.textTertiary },
     listContent: { paddingHorizontal: 18, paddingTop: 10, gap: 4 },
@@ -101,6 +137,7 @@ function createStyles(colors: ThemeColors) {
       flexDirection: "row",
       gap: 10,
       paddingVertical: 10,
+      backgroundColor: colors.surface,
       borderBottomWidth: 1,
       borderBottomColor: colors.divider
     },
@@ -114,6 +151,15 @@ function createStyles(colors: ThemeColors) {
     },
     rowTitle: { fontSize: 13, fontWeight: "700", color: colors.textPrimary },
     rowBody: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-    rowTime: { fontSize: 10, color: colors.textTertiary, marginTop: 4 }
+    rowTime: { fontSize: 10, color: colors.textTertiary, marginTop: 4 },
+    deleteAction: {
+      width: 76,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 2,
+      backgroundColor: colors.danger,
+      marginBottom: 1
+    },
+    deleteActionLabel: { fontSize: 10, fontWeight: "700", color: "#fff" }
   });
 }

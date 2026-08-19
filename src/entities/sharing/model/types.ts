@@ -7,12 +7,16 @@ export type SharedChecklist = {
   checklist: PackingChecklist;
 };
 
+export type ItineraryShareRole = "viewer" | "editor";
+
 export type SharedItinerarySummary = {
   owner: FriendUser;
   itinerary: ItinerarySummary;
+  role: ItineraryShareRole;
 };
 
 export type SharedItinerary = {
   owner: FriendUser;
   itinerary: Itinerary;
+  role: ItineraryShareRole;
 };

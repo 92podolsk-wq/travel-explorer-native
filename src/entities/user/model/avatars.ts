@@ -1,16 +1,19 @@
+// Mirrors the web app's avatar IDs (src/entities/user/model/avatars.ts) —
+// the backend validates avatarId against that same list, so native must use
+// identical IDs or every avatar-change request gets rejected as invalid.
 export const avatarIds = [
-  "torii",
-  "sakura",
-  "fuji",
-  "koi",
-  "lantern",
-  "maple",
-  "bamboo",
-  "tea",
-  "fan",
-  "pagoda",
-  "maneki-neko",
-  "dango"
+  "compass",
+  "globe",
+  "mountain",
+  "sun",
+  "camera",
+  "plane",
+  "backpack",
+  "map-pin",
+  "suitcase",
+  "tent",
+  "binoculars",
+  "balloon"
 ] as const;
 
 export type AvatarId = (typeof avatarIds)[number];
@@ -22,19 +25,20 @@ export function isAvatarId(value: string): value is AvatarId {
 // The web app renders these as hand-drawn inline SVGs (see
 // src/shared/ui/profile-avatar.tsx in the web repo). Porting that pixel-for-
 // pixel would mean pulling in react-native-svg — a new native module, another
-// prebuild + ~7min rebuild cycle — just for 12 static icons. An emoji + the
-// same background color reads close enough and needs zero native code.
+// prebuild + ~7min rebuild cycle — just for 12 static icons. An emoji on the
+// same background color (taken from web's SVG circle fill) reads close
+// enough and needs zero native code.
 export const avatarPresentation: Record<AvatarId, { emoji: string; color: string }> = {
-  torii: { emoji: "⛩️", color: "#a3312c" },
-  sakura: { emoji: "🌸", color: "#dd8fa4" },
-  fuji: { emoji: "🗻", color: "#cfe9f7" },
-  koi: { emoji: "🎏", color: "#cdeee6" },
-  lantern: { emoji: "🏮", color: "#f3e4c8" },
-  maple: { emoji: "🍁", color: "#f4dba0" },
-  bamboo: { emoji: "🎋", color: "#cbe6c9" },
-  tea: { emoji: "🍵", color: "#efe6d3" },
-  fan: { emoji: "🪭", color: "#c8402f" },
-  pagoda: { emoji: "🏯", color: "#9db4c9" },
-  "maneki-neko": { emoji: "🐱", color: "#eab659" },
-  dango: { emoji: "🍡", color: "#f0e6d8" }
+  compass: { emoji: "🧭", color: "#dbe7f3" },
+  globe: { emoji: "🌍", color: "#cdeee6" },
+  mountain: { emoji: "⛰️", color: "#cfe9f7" },
+  sun: { emoji: "☀️", color: "#fdf1d6" },
+  camera: { emoji: "📷", color: "#e8e2f5" },
+  plane: { emoji: "✈️", color: "#d7ecfa" },
+  backpack: { emoji: "🎒", color: "#f3e0c8" },
+  "map-pin": { emoji: "📍", color: "#f6d9d9" },
+  suitcase: { emoji: "🧳", color: "#d9e8d5" },
+  tent: { emoji: "⛺", color: "#e6ddf0" },
+  binoculars: { emoji: "🔭", color: "#dbe3ea" },
+  balloon: { emoji: "🎈", color: "#fbe3ea" }
 };

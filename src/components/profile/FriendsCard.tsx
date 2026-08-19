@@ -6,10 +6,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTranslations } from "@/shared/i18n/useTranslations";
 import { useTheme } from "@/shared/theme/useTheme";
 import type { ThemeColors } from "@/shared/theme/colors";
+import { formatLastSeen } from "@/shared/lib/format-last-seen";
 import { useExplorerStore } from "@/shared/model/explorer-store";
 import { ProfileAvatar } from "@/shared/ui/ProfileAvatar";
 import { acceptFriendRequest, getFriends, removeFriendship, searchUsers, sendFriendRequest } from "@/shared/api/friends";
 import type { FriendEntry, FriendsResponse, FriendUser } from "@/entities/user/model/types";
+import type { Language } from "@/shared/i18n/types";
 
 const EMPTY_RESPONSE: FriendsResponse = { friends: [], incoming: [], outgoing: [] };
 
@@ -20,6 +22,7 @@ export function FriendsCard() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const currentUser = useExplorerStore((state) => state.currentUser);
+  const language = useExplorerStore((state) => state.language);
 
   const [data, setData] = useState<FriendsResponse>(EMPTY_RESPONSE);
   const [isLoading, setIsLoading] = useState(true);
@@ -129,12 +132,17 @@ export function FriendsCard() {
             results.map((user) => (
               <View key={user.id} style={styles.row}>
                 <View style={styles.rowUser}>
-                  <ProfileAvatar avatarId={user.avatarId} size={28} />
+                  <View style={styles.avatarWrap}>
+                    <ProfileAvatar avatarId={user.avatarId} size={28} />
+                    {user.isOnline ? <View style={styles.avatarOnlineDot} /> : null}
+                  </View>
                   <View style={styles.rowUserText}>
                     <Text style={styles.rowName} numberOfLines={1}>
                       {user.name || `@${user.username}`}
                     </Text>
-                    <Text style={styles.rowUsername} numberOfLines={1}>{`@${user.username}`}</Text>
+                    <Text style={styles.rowUsername} numberOfLines={1}>
+                      {`@${user.username} · ${formatLastSeen(user.lastSeenAt, user.isOnline, language)}`}
+                    </Text>
                   </View>
                 </View>
                 {friendIds.has(user.id) ? (
@@ -169,7 +177,7 @@ export function FriendsCard() {
         <View style={styles.resultsGroup}>
           <Text style={styles.subTitle}>{t.auth.friendsIncomingTitle}</Text>
           {data.incoming.map((entry) => (
-            <FriendRow key={entry.id} entry={entry} styles={styles} busy={pendingActionId === entry.id}>
+            <FriendRow key={entry.id} entry={entry} styles={styles} busy={pendingActionId === entry.id} language={language}>
               <TouchableOpacity
                 style={styles.primaryButton}
                 onPress={() => handleAccept(entry.id)}
@@ -195,7 +203,7 @@ export function FriendsCard() {
         <View style={styles.resultsGroup}>
           <Text style={styles.subTitle}>{t.auth.friendsOutgoingTitle}</Text>
           {data.outgoing.map((entry) => (
-            <FriendRow key={entry.id} entry={entry} styles={styles} busy={pendingActionId === entry.id}>
+            <FriendRow key={entry.id} entry={entry} styles={styles} busy={pendingActionId === entry.id} language={language}>
               <TouchableOpacity
                 style={styles.secondaryButton}
                 onPress={() => handleRemove(entry.id)}
@@ -217,7 +225,7 @@ export function FriendsCard() {
           <Text style={styles.mutedText}>{t.auth.friendsEmpty}</Text>
         ) : (
           data.friends.map((entry) => (
-            <FriendRow key={entry.id} entry={entry} styles={styles} busy={pendingActionId === entry.id}>
+            <FriendRow key={entry.id} entry={entry} styles={styles} busy={pendingActionId === entry.id} language={language}>
               <TouchableOpacity
                 style={styles.secondaryButton}
                 onPress={() => handleRemove(entry.id)}
@@ -238,22 +246,29 @@ function FriendRow({
   entry,
   styles,
   busy,
+  language,
   children
 }: {
   entry: FriendEntry;
   styles: Styles;
   busy: boolean;
+  language: Language;
   children: React.ReactNode;
 }) {
   return (
     <View style={[styles.row, busy && styles.rowBusy]}>
       <View style={styles.rowUser}>
-        <ProfileAvatar avatarId={entry.user.avatarId} size={28} />
+        <View style={styles.avatarWrap}>
+          <ProfileAvatar avatarId={entry.user.avatarId} size={28} />
+          {entry.user.isOnline ? <View style={styles.avatarOnlineDot} /> : null}
+        </View>
         <View style={styles.rowUserText}>
           <Text style={styles.rowName} numberOfLines={1}>
             {entry.user.name || `@${entry.user.username}`}
           </Text>
-          <Text style={styles.rowUsername} numberOfLines={1}>{`@${entry.user.username}`}</Text>
+          <Text style={styles.rowUsername} numberOfLines={1}>
+            {`@${entry.user.username} · ${formatLastSeen(entry.user.lastSeenAt, entry.user.isOnline, language)}`}
+          </Text>
         </View>
       </View>
       <View style={styles.rowActions}>{children}</View>
@@ -298,6 +313,18 @@ function createStyles(colors: ThemeColors) {
     },
     rowBusy: { opacity: 0.6 },
     rowUser: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1, minWidth: 0 },
+    avatarWrap: { position: "relative" },
+    avatarOnlineDot: {
+      position: "absolute",
+      right: -1,
+      bottom: -1,
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: "#34d399",
+      borderWidth: 1.5,
+      borderColor: colors.background
+    },
     rowUserText: { flex: 1, minWidth: 0 },
     rowName: { fontSize: 12, fontWeight: "700", color: colors.textPrimary },
     rowUsername: { fontSize: 11, color: colors.textTertiary },

@@ -6,6 +6,8 @@ export type User = {
   avatarId: string | null;
   hideFromSearch: boolean;
   createdAt: string;
+  lastSeenAt: string | null;
+  isOnline: boolean;
 };
 
 export type FriendUser = {
@@ -13,6 +15,8 @@ export type FriendUser = {
   username: string;
   name: string | null;
   avatarId: string | null;
+  lastSeenAt: string | null;
+  isOnline: boolean;
 };
 
 export type FriendEntry = {

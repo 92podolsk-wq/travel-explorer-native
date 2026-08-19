@@ -33,6 +33,15 @@ export async function markAllNotificationsRead(): Promise<void> {
   await AsyncStorage.setItem(KEY, JSON.stringify(list.map((entry) => ({ ...entry, read: true }))));
 }
 
+export async function removeNotificationHistoryEntry(id: string): Promise<void> {
+  const list = await getNotificationHistory();
+  await AsyncStorage.setItem(KEY, JSON.stringify(list.filter((entry) => entry.id !== id)));
+}
+
+export async function clearNotificationHistory(): Promise<void> {
+  await AsyncStorage.setItem(KEY, JSON.stringify([]));
+}
+
 export async function getUnreadNotificationCount(): Promise<number> {
   const list = await getNotificationHistory();
   return list.filter((entry) => !entry.read).length;

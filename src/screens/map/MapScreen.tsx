@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, PixelRatio, StyleSheet, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, PixelRatio, StyleSheet, TouchableOpacity, View } from "react-native";
 import { Text } from "@/shared/ui/AppText";
 import { TextInput } from "@/shared/ui/AppTextInput";
 import { LinearGradient } from "expo-linear-gradient";
@@ -18,6 +18,7 @@ import {
 } from "@maplibre/maplibre-react-native";
 import type { PressEventWithFeatures } from "@maplibre/maplibre-react-native";
 import type { NativeSyntheticEvent } from "react-native";
+import type { Region } from "@/entities/region/model/types";
 import { fuzzyMatch } from "@/shared/lib/fuzzy-match";
 import { shuffle } from "@/shared/lib/shuffle";
 import { haversineDistanceMeters } from "@/shared/lib/geo";
@@ -53,13 +54,30 @@ import type { ThemeColors } from "@/shared/theme/colors";
 // this correction icons render one full pixelRatio too large.
 const MARKER_ICON_SIZE = 1 / PixelRatio.get();
 
+function mergeRegionBounds(regionsToMerge: Region[]): [number, number, number, number] {
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  for (const region of regionsToMerge) {
+    const [[lng1, lat1], [lng2, lat2]] = region.bounds;
+    west = Math.min(west, lng1, lng2);
+    east = Math.max(east, lng1, lng2);
+    south = Math.min(south, lat1, lat2);
+    north = Math.max(north, lat1, lat2);
+  }
+  return [west, south, east, north];
+}
+
 export function MapScreen() {
   const pois = useExplorerStore((state) => state.pois);
   const regions = useExplorerStore((state) => state.regions);
   const categories = useExplorerStore((state) => state.categories);
   const siteSettings = useExplorerStore((state) => state.siteSettings);
-  const activeRegionId = useExplorerStore((state) => state.activeRegionId);
-  const setActiveRegionId = useExplorerStore((state) => state.setActiveRegionId);
+  const hasPreciseLocation = useExplorerStore((state) => state.hasPreciseLocation);
+  const activeRegionIds = useExplorerStore((state) => state.activeRegionIds);
+  const setActiveRegion = useExplorerStore((state) => state.setActiveRegion);
+  const setActiveCountry = useExplorerStore((state) => state.setActiveCountry);
   const selectedCategories = useExplorerStore((state) => state.selectedCategories);
   const toggleCategory = useExplorerStore((state) => state.toggleCategory);
   const searchQuery = useExplorerStore((state) => state.searchQuery);
@@ -117,40 +135,40 @@ export function MapScreen() {
   }, [setDownloadedRegionIds]);
 
   async function handleDownloadActiveRegion() {
-    if (!activeRegion) return;
+    if (!primaryRegion) return;
     const mapStyleUrl = resolveMapStyleUrl(siteSettings?.mapStyleId ?? "openfreemap-bright");
-    const regionPois = pois.filter((p) => p.regionId === activeRegion.id);
-    setRegionDownloadProgress(activeRegion.id, 0);
+    const regionPois = pois.filter((p) => p.regionId === primaryRegion.id);
+    setRegionDownloadProgress(primaryRegion.id, 0);
     try {
-      await downloadRegionOffline(activeRegion, mapStyleUrl, (progress: OfflineProgress) => {
+      await downloadRegionOffline(primaryRegion, mapStyleUrl, (progress: OfflineProgress) => {
         if (progress.state !== "complete") {
-          setRegionDownloadProgress(activeRegion.id, progress.percentage * 0.7);
+          setRegionDownloadProgress(primaryRegion.id, progress.percentage * 0.7);
         }
       });
       await downloadRegionPhotos(regionPois, (done, total) => {
         const photoPercent = total > 0 ? (done / total) * 30 : 30;
-        setRegionDownloadProgress(activeRegion.id, 70 + photoPercent);
+        setRegionDownloadProgress(primaryRegion.id, 70 + photoPercent);
       });
-      setRegionDownloadProgress(activeRegion.id, null);
-      setDownloadedRegionIds([...downloadedRegionIds, activeRegion.id]);
+      setRegionDownloadProgress(primaryRegion.id, null);
+      setDownloadedRegionIds([...downloadedRegionIds, primaryRegion.id]);
     } catch {
-      setRegionDownloadProgress(activeRegion.id, null);
+      setRegionDownloadProgress(primaryRegion.id, null);
       Alert.alert(t.auth.offlineMapDownloadError);
     }
   }
 
   function handleDeleteActiveRegion() {
-    if (!activeRegion) return;
-    const regionName = activeRegion.nameByLanguage[language] ?? activeRegion.name;
+    if (!primaryRegion) return;
+    const regionName = primaryRegion.nameByLanguage[language] ?? primaryRegion.name;
     Alert.alert(t.auth.offlineMapDeleteConfirm.replace("{name}", regionName), t.auth.offlineMapDeleteConfirmBody, [
       { text: t.auth.cancel, style: "cancel" },
       {
         text: t.auth.delete,
         style: "destructive",
         onPress: async () => {
-          await deleteRegionOffline(activeRegion.id);
-          deleteRegionPhotos(pois.filter((p) => p.regionId === activeRegion.id));
-          setDownloadedRegionIds(downloadedRegionIds.filter((id) => id !== activeRegion.id));
+          await deleteRegionOffline(primaryRegion.id);
+          deleteRegionPhotos(pois.filter((p) => p.regionId === primaryRegion.id));
+          setDownloadedRegionIds(downloadedRegionIds.filter((id) => id !== primaryRegion.id));
         }
       }
     ]);
@@ -236,22 +254,41 @@ export function MapScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPoiId]);
 
-  const activeRegion = useMemo(() => regions.find((r) => r.id === activeRegionId) ?? null, [regions, activeRegionId]);
-  const isRegionDownloaded = activeRegion ? downloadedRegionIds.includes(activeRegion.id) : false;
-  const activeRegionDownloadProgress = activeRegion ? downloadingProgress[activeRegion.id] : undefined;
+  const activeRegions = useMemo(() => regions.filter((r) => activeRegionIds.includes(r.id)), [regions, activeRegionIds]);
+  const primaryRegion = activeRegions[0] ?? null;
+  const isCountryMode = activeRegions.length > 1;
+  const activeCountry = useMemo(() => {
+    if (!primaryRegion) return null;
+    const area = areas.find((a) => a.id === primaryRegion.areaId);
+    return area ? countries.find((c) => c.id === area.countryId) ?? null : null;
+  }, [primaryRegion, areas, countries]);
+  const isRegionDownloaded = primaryRegion ? downloadedRegionIds.includes(primaryRegion.id) : false;
+  const activeRegionDownloadProgress = primaryRegion ? downloadingProgress[primaryRegion.id] : undefined;
+
+  // If the app boots with a persisted country-wide selection (multiple
+  // regions), the initial camera state only frames the first region — fit
+  // the whole set once on mount instead of leaving the rest off-screen.
+  useEffect(() => {
+    if (activeRegions.length > 1) {
+      cameraRef.current?.fitBounds(mergeRegionBounds(activeRegions), {
+        padding: { top: 80, right: 40, bottom: 80, left: 40 },
+        duration: 0
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const visiblePois = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return pois.filter((poi) => {
-      if (poi.regionId !== activeRegionId) return false;
+      if (!activeRegionIds.includes(poi.regionId)) return false;
       if (!selectedCategories.includes(poi.category)) return false;
       if (query.length > 0 && !fuzzyMatch(poi.name, query)) return false;
       return true;
     });
-  }, [pois, activeRegionId, selectedCategories, searchQuery]);
+  }, [pois, activeRegionIds, selectedCategories, searchQuery]);
 
   const categoriesById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
-  const visibleCategoryCount = useMemo(() => categories.filter((c) => !c.isHidden).length, [categories]);
   const poisById = useMemo(() => new Map(visiblePois.map((poi) => [poi.id, poi])), [visiblePois]);
   const previewPoi = previewPoiId ? poisById.get(previewPoiId) : undefined;
   // Whichever POI is currently "focused" on the map — either the lightweight
@@ -271,7 +308,7 @@ export function MapScreen() {
   }, [previewPoiId]);
 
   const [regionView, setRegionView] = useState<{ zoom: number; bounds: [number, number, number, number] }>(() => ({
-    zoom: activeRegion?.defaultZoom ?? 12,
+    zoom: primaryRegion?.defaultZoom ?? 12,
     bounds: [-180, -85, 180, 85]
   }));
 
@@ -366,37 +403,43 @@ export function MapScreen() {
   }
 
   const swipeCandidates = useMemo(() => {
-    const regionPois = pois.filter((poi) => poi.regionId === activeRegionId);
+    const regionPois = pois.filter((poi) => activeRegionIds.includes(poi.regionId));
     const unswiped = regionPois.filter(
       (poi) => !favorites.includes(poi.id) && !viewedPoiIds.includes(poi.id) && selectedCategories.includes(poi.category)
     );
     return shuffle(unswiped);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pois, activeRegionId, selectedCategories, isSwipeOpen]);
+  }, [pois, activeRegionIds, selectedCategories, isSwipeOpen]);
 
   const neighboringSwipeRegions = useMemo(() => {
-    if (!activeRegion) return [];
-    const activeCountryId = areas.find((area) => area.id === activeRegion.areaId)?.countryId;
+    if (!primaryRegion) return [];
+    const activeCountryId = areas.find((area) => area.id === primaryRegion.areaId)?.countryId;
     if (!activeCountryId) return [];
     return regions
-      .filter((region) => region.status === "published" && region.id !== activeRegionId)
+      .filter((region) => region.status === "published" && !activeRegionIds.includes(region.id))
       .filter((region) => areas.find((area) => area.id === region.areaId)?.countryId === activeCountryId)
       .map((region) => ({
         id: region.id,
         name: region.nameByLanguage[language] ?? region.name,
-        distance: haversineDistanceMeters(activeRegion.center, region.center),
+        distance: haversineDistanceMeters(primaryRegion.center, region.center),
         count: pois.filter((poi) => poi.regionId === region.id && !favorites.includes(poi.id) && !viewedPoiIds.includes(poi.id))
           .length
       }))
       .filter((region) => region.count > 0)
       .sort((a, b) => a.distance - b.distance)
       .slice(0, 5);
-  }, [activeRegion, activeRegionId, areas, regions, pois, favorites, viewedPoiIds, language]);
+  }, [primaryRegion, activeRegionIds, areas, regions, pois, favorites, viewedPoiIds, language]);
 
   const mapStyle = resolveMapStyleUrl(siteSettings?.mapStyleId ?? "openfreemap-bright");
   const position = useCurrentPosition();
 
   function handleLocateMe() {
+    if (hasPreciseLocation === false) {
+      Alert.alert(t.app.impreciseLocationTitle, t.app.impreciseLocationBody, [
+        { text: t.app.impreciseLocationCancel, style: "cancel" },
+        { text: t.app.impreciseLocationOpenSettings, onPress: () => Linking.openSettings() }
+      ]);
+    }
     if (!position) return;
     cameraRef.current?.flyTo({
       center: [position.coords.longitude, position.coords.latitude],
@@ -411,7 +454,7 @@ export function MapScreen() {
     cameraRef.current?.flyTo({ center, zoom: zoom + delta, duration: 300 });
   }
 
-  if (!activeRegion) {
+  if (!primaryRegion) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator color={colors.primary} />
@@ -419,7 +462,8 @@ export function MapScreen() {
     );
   }
 
-  const activeRegionName = activeRegion.nameByLanguage[language] ?? activeRegion.name;
+  const activeRegionName = primaryRegion.nameByLanguage[language] ?? primaryRegion.name;
+  const heroTitleText = isCountryMode ? activeCountry?.nameByLanguage[language] ?? activeCountry?.name ?? activeRegionName : activeRegionName;
 
   return (
     <View style={styles.container}>
@@ -453,7 +497,7 @@ export function MapScreen() {
       >
         <Camera
           ref={cameraRef}
-          initialViewState={{ center: [activeRegion.center.lng, activeRegion.center.lat], zoom: activeRegion.defaultZoom }}
+          initialViewState={{ center: [primaryRegion.center.lng, primaryRegion.center.lat], zoom: primaryRegion.defaultZoom }}
         />
         <UserLocation animated accuracy heading />
         {position ? <PulseMarker lngLat={[position.coords.longitude, position.coords.latitude]} color="#3b82f6" /> : null}
@@ -542,7 +586,7 @@ export function MapScreen() {
             key={previewPoi.id}
             poi={previewPoi}
             category={categoriesById.get(previewPoi.category)}
-            regionName={activeRegionName}
+            regionName={regions.find((r) => r.id === previewPoi.regionId)?.nameByLanguage[language] ?? activeRegionName}
             language={language}
             isFavorite={favorites.includes(previewPoi.id)}
             onView={() => {
@@ -568,25 +612,29 @@ export function MapScreen() {
 
             <TouchableOpacity style={styles.heroTitleRow} onPress={() => setIsRegionPickerOpen(true)} activeOpacity={0.7}>
               <Text style={styles.heroTitle} numberOfLines={1}>
-                {activeRegionName}
+                {heroTitleText}
               </Text>
               <Ionicons name="chevron-down" size={16} color={colors.heroTextMuted} style={{ marginLeft: 2 }} />
             </TouchableOpacity>
 
-            <WeatherChips
-              regionId={activeRegion.id}
-              latitude={activeRegion.center.lat}
-              longitude={activeRegion.center.lng}
-              timeZoneOffsetHours={activeRegion.timezoneOffsetHours}
-            />
+            {!isCountryMode ? (
+              <WeatherChips
+                regionId={primaryRegion.id}
+                latitude={primaryRegion.center.lat}
+                longitude={primaryRegion.center.lng}
+                timeZoneOffsetHours={primaryRegion.timezoneOffsetHours}
+              />
+            ) : null}
           </LinearGradient>
 
           <View style={styles.heroBody}>
-            <SeasonReminderBanner
-              regionId={activeRegion.id}
-              regionName={activeRegionName}
-              seasonWindows={activeRegion.seasonWindows}
-            />
+            {!isCountryMode ? (
+              <SeasonReminderBanner
+                regionId={primaryRegion.id}
+                regionName={activeRegionName}
+                seasonWindows={primaryRegion.seasonWindows}
+              />
+            ) : null}
 
             <View style={styles.searchBox}>
               <Ionicons name="search" size={16} color={colors.textTertiary} />
@@ -600,7 +648,7 @@ export function MapScreen() {
               <TouchableOpacity style={styles.categoryFilterButton} onPress={() => setIsCategorySheetOpen(true)}>
                 <Ionicons name="options-outline" size={15} color={colors.primary} />
                 <Text style={styles.categoryFilterButtonLabel}>
-                  {selectedCategories.length}/{visibleCategoryCount}
+                  {selectedCategories.length}/{categories.length}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -620,9 +668,10 @@ export function MapScreen() {
 
       <TouchableOpacity style={styles.locateButton} onPress={handleLocateMe}>
         <Ionicons name="locate" size={22} color={colors.primary} />
+        {hasPreciseLocation === false ? <View style={styles.locateButtonBadge} /> : null}
       </TouchableOpacity>
 
-      {activeRegion ? (
+      {!isCountryMode ? (
         <TouchableOpacity
           style={styles.offlineButton}
           onPress={isRegionDownloaded ? handleDeleteActiveRegion : handleDownloadActiveRegion}
@@ -648,12 +697,27 @@ export function MapScreen() {
       <RegionSwitcherModal
         visible={isRegionPickerOpen}
         regions={regions}
-        activeRegionId={activeRegionId}
-        onSelect={(regionId) => {
-          setActiveRegionId(regionId);
+        countries={countries}
+        areas={areas}
+        activeRegionIds={activeRegionIds}
+        onSelectRegion={(regionId) => {
+          setActiveRegion(regionId);
           const region = regions.find((r) => r.id === regionId);
           if (region) {
             cameraRef.current?.flyTo({ center: [region.center.lng, region.center.lat], zoom: region.defaultZoom, duration: 800 });
+          }
+        }}
+        onSelectCountry={(countryId) => {
+          setActiveCountry(countryId);
+          const countryRegions = regions.filter((region) => {
+            const area = areas.find((a) => a.id === region.areaId);
+            return area?.countryId === countryId;
+          });
+          if (countryRegions.length > 0) {
+            cameraRef.current?.fitBounds(mergeRegionBounds(countryRegions), {
+              padding: { top: 80, right: 40, bottom: 80, left: 40 },
+              duration: 800
+            });
           }
         }}
         onClose={() => setIsRegionPickerOpen(false)}
@@ -679,7 +743,7 @@ export function MapScreen() {
 
       {isSwipeOpen && (
         <SwipeDiscoveryModal
-          key={activeRegionId}
+          key={activeRegionIds.join(",")}
           pois={swipeCandidates}
           language={language}
           onLike={toggleFavorite}
@@ -687,7 +751,7 @@ export function MapScreen() {
           onClose={() => setIsSwipeOpen(false)}
           neighboringRegions={neighboringSwipeRegions}
           onSwitchRegion={(regionId) => {
-            setActiveRegionId(regionId);
+            setActiveRegion(regionId);
           }}
         />
       )}
@@ -778,6 +842,17 @@ function createStyles(colors: ThemeColors) {
       shadowOpacity: 0.2,
       shadowRadius: 4,
       elevation: 4
+    },
+    locateButtonBadge: {
+      position: "absolute",
+      top: 4,
+      right: 4,
+      width: 9,
+      height: 9,
+      borderRadius: 5,
+      backgroundColor: "#e8672e",
+      borderWidth: 1.5,
+      borderColor: colors.surface
     },
     offlineButton: {
       position: "absolute",

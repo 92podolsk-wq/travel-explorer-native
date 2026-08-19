@@ -26,7 +26,10 @@ export function CategoryFilterSheet({ visible, categories, selectedCategories, o
   const selectAllCategories = useExplorerStore((state) => state.selectAllCategories);
   const clearAllCategories = useExplorerStore((state) => state.clearAllCategories);
 
-  const visibleCategories = categories.filter((category) => !category.isHidden);
+  // Hidden categories (e.g. admin-curated "BookOff"/"Отели") are already
+  // gated server-side by the current user's canAccessHiddenCategories flag —
+  // if one made it into `categories` at all, this user is meant to see and
+  // toggle it, so no further isHidden filtering happens here.
 
   return (
     <AnimatedBottomSheet visible={visible} onClose={onClose} backdropColor={colors.overlay} contentStyle={styles.sheet}>
@@ -48,7 +51,7 @@ export function CategoryFilterSheet({ visible, categories, selectedCategories, o
         </View>
 
         <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-          {visibleCategories.map((category) => {
+          {categories.map((category) => {
             const isSelected = selectedCategories.includes(category.id);
             return (
               <TouchableOpacity key={category.id} style={styles.row} onPress={() => onToggle(category.id)}>

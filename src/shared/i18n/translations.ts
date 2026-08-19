@@ -34,6 +34,16 @@ type TranslationDictionary = {
     off: string;
     kyoto: string;
     chooseCity: string;
+    countryLabel: string;
+    selectWholeCountry: string;
+    greetingMorning: string;
+    greetingDay: string;
+    greetingEvening: string;
+    greetingNight: string;
+    impreciseLocationTitle: string;
+    impreciseLocationBody: string;
+    impreciseLocationCancel: string;
+    impreciseLocationOpenSettings: string;
     categoryFiltersButton: string;
     categoryFiltersTitle: string;
     categoryFiltersSelectAll: string;
@@ -99,6 +109,7 @@ type TranslationDictionary = {
     friendsLoading: string;
     friendsEmpty: string;
     friendsRemove: string;
+    itineraryShareCanEdit: string;
     shareChecklist: string;
     sharedChecklistsTitle: string;
     shareItineraryWithFriend: string;
@@ -165,6 +176,14 @@ type TranslationDictionary = {
     removeDay: string;
     removeDayConfirm: string;
     dayPlaceCount: string;
+    addLocation: string;
+    addLocationTitle: string;
+    addLocationEmpty: string;
+    stepsApprox: string;
+    markVisited: string;
+    notesPlaceholder: string;
+    dayNotesPlaceholder: string;
+    notesDone: string;
     newItinerary: string;
     deleteItinerary: string;
     deleteItineraryConfirm: string;
@@ -202,6 +221,8 @@ type TranslationDictionary = {
     notificationsCardTitle: string;
     notificationHistoryTitle: string;
     notificationHistoryEmpty: string;
+    notificationHistoryClearAll: string;
+    notificationHistoryDelete: string;
     appSettingsTitle: string;
     themeTitle: string;
     themeLight: string;
@@ -259,6 +280,7 @@ type TranslationDictionary = {
     bootErrorTitle: string;
     bootErrorBody: string;
     retry: string;
+    offlineModeBanner: string;
   };
   report: {
     cta: string;
@@ -303,6 +325,17 @@ export const translations: Record<Language, TranslationDictionary> = {
       off: "Выкл",
       kyoto: "Киото",
       chooseCity: "Выберите город",
+      countryLabel: "Страна",
+      selectWholeCountry: "Показать все локации страны",
+      greetingMorning: "Доброе утро!",
+      greetingDay: "Добрый день!",
+      greetingEvening: "Добрый вечер!",
+      greetingNight: "Доброй ночи!",
+      impreciseLocationTitle: "Включено приблизительное местоположение",
+      impreciseLocationBody:
+        "Ваше местоположение обновляется реже и менее точно. Для точной геолокации на карте включите «Точное местоположение» в настройках приложения.",
+      impreciseLocationCancel: "Понятно",
+      impreciseLocationOpenSettings: "Открыть настройки",
       categoryFiltersButton: "Категории",
       categoryFiltersTitle: "Категории",
       categoryFiltersSelectAll: "Выбрать все",
@@ -381,6 +414,7 @@ export const translations: Record<Language, TranslationDictionary> = {
       friendsLoading: "Загрузка…",
       friendsEmpty: "Пока нет друзей",
       friendsRemove: "Удалить",
+      itineraryShareCanEdit: "Редактор",
       shareChecklist: "Поделиться",
       sharedChecklistsTitle: "Чек-листы, которыми с вами поделились",
       shareItineraryWithFriend: "Поделиться",
@@ -447,6 +481,14 @@ export const translations: Record<Language, TranslationDictionary> = {
       removeDay: "Удалить день",
       removeDayConfirm: "Удалить этот день и все его точки? Это действие нельзя отменить.",
       dayPlaceCount: "{count} мест",
+      addLocation: "Добавить локацию",
+      addLocationTitle: "Добавить локацию",
+      addLocationEmpty: "Ничего не найдено",
+      stepsApprox: "~{count} шагов",
+      markVisited: "Отметить посещённым",
+      notesPlaceholder: "Заметка к точке…",
+      dayNotesPlaceholder: "Заметка к дню…",
+      notesDone: "Готово",
       newItinerary: "Создать маршрут",
       deleteItinerary: "Удалить маршрут",
       deleteItineraryConfirm: "«{title}» будет удалён без возможности восстановления.",
@@ -484,6 +526,8 @@ export const translations: Record<Language, TranslationDictionary> = {
       notificationsCardTitle: "Уведомления",
       notificationHistoryTitle: "История уведомлений",
       notificationHistoryEmpty: "Пока нет уведомлений",
+      notificationHistoryClearAll: "Очистить всё",
+      notificationHistoryDelete: "Удалить",
       appSettingsTitle: "Настройки приложения",
       themeTitle: "Тема",
       themeLight: "Светлая",
@@ -540,7 +584,8 @@ export const translations: Record<Language, TranslationDictionary> = {
       guestPrompt: "Войдите, чтобы сохранять места, отмечать посещённое и планировать маршруты",
       bootErrorTitle: "Не удалось загрузить данные",
       bootErrorBody: "Проверьте подключение к интернету и попробуйте ещё раз.",
-      retry: "Повторить"
+      retry: "Повторить",
+      offlineModeBanner: "Нет связи с сервером — показаны сохранённые данные"
     },
     report: {
       cta: "Нашли неточность в описании локации?",
@@ -583,6 +628,17 @@ export const translations: Record<Language, TranslationDictionary> = {
       off: "Off",
       kyoto: "Kyoto",
       chooseCity: "Choose a city",
+      countryLabel: "Country",
+      selectWholeCountry: "Show every location in this country",
+      greetingMorning: "Good morning!",
+      greetingDay: "Good afternoon!",
+      greetingEvening: "Good evening!",
+      greetingNight: "Good night!",
+      impreciseLocationTitle: "Approximate location is on",
+      impreciseLocationBody:
+        "Your position updates less often and less precisely. For accurate positioning on the map, enable \"Precise location\" in the app's settings.",
+      impreciseLocationCancel: "Got it",
+      impreciseLocationOpenSettings: "Open Settings",
       categoryFiltersButton: "Categories",
       categoryFiltersTitle: "Categories",
       categoryFiltersSelectAll: "Select all",
@@ -661,6 +717,7 @@ export const translations: Record<Language, TranslationDictionary> = {
       friendsLoading: "Loading…",
       friendsEmpty: "No friends yet",
       friendsRemove: "Remove",
+      itineraryShareCanEdit: "Editor",
       shareChecklist: "Share",
       sharedChecklistsTitle: "Checklists shared with you",
       shareItineraryWithFriend: "Share",
@@ -727,6 +784,14 @@ export const translations: Record<Language, TranslationDictionary> = {
       removeDay: "Remove day",
       removeDayConfirm: "Remove this day and all its stops? This can't be undone.",
       dayPlaceCount: "{count} places",
+      addLocation: "Add location",
+      addLocationTitle: "Add location",
+      addLocationEmpty: "No results",
+      stepsApprox: "~{count} steps",
+      markVisited: "Mark as visited",
+      notesPlaceholder: "Note for this stop…",
+      dayNotesPlaceholder: "Note for the day…",
+      notesDone: "Done",
       newItinerary: "Create itinerary",
       deleteItinerary: "Delete itinerary",
       deleteItineraryConfirm: "«name» will be permanently deleted.",
@@ -764,6 +829,8 @@ export const translations: Record<Language, TranslationDictionary> = {
       notificationsCardTitle: "Notifications",
       notificationHistoryTitle: "Notification history",
       notificationHistoryEmpty: "No notifications yet",
+      notificationHistoryClearAll: "Clear all",
+      notificationHistoryDelete: "Delete",
       appSettingsTitle: "App settings",
       themeTitle: "Theme",
       themeLight: "Light",
@@ -820,7 +887,8 @@ export const translations: Record<Language, TranslationDictionary> = {
       guestPrompt: "Log in to save places, mark them visited, and plan routes",
       bootErrorTitle: "Couldn't load data",
       bootErrorBody: "Check your internet connection and try again.",
-      retry: "Retry"
+      retry: "Retry",
+      offlineModeBanner: "No connection — showing saved data"
     },
     report: {
       cta: "Found an inaccuracy in this description?",
@@ -834,286 +902,6 @@ export const translations: Record<Language, TranslationDictionary> = {
       error: "Couldn't send it. Please try again."
     }
   },
-  ja: {
-    app: {
-      searchPlaceholder: "場所を検索",
-      poiPreviewView: "見る",
-      checklistCardTitle: "旅行チェックリスト",
-      checklistSetDate: "出発日を設定",
-      checklistDateSet: "出発日: {date}",
-      checklistPackingTitle: "持ち物リスト",
-      checklistShoppingTitle: "買うもの・お土産",
-      checklistAddPlaceholder: "項目を追加",
-      save: "保存",
-      mustVisit: "必見",
-      photo: "写真",
-      best: "おすすめ",
-      duration: "所要時間",
-      effort: "難易度",
-      bestTime: "おすすめの時間",
-      signals: "特徴",
-      minutesShort: "分",
-      visited: "訪問済み",
-      share: "共有",
-      linkCopied: "リンクをコピーしました",
-      noSeasonPhotoHint: "この季節の写真がありません — デフォルトを表示",
-      previousPlace: "前へ",
-      nextPlace: "次へ",
-      on: "オン",
-      off: "オフ",
-      kyoto: "京都",
-      chooseCity: "都市を選択",
-      categoryFiltersButton: "カテゴリー",
-      categoryFiltersTitle: "カテゴリー",
-      categoryFiltersSelectAll: "すべて選択",
-      categoryFiltersClearAll: "すべて解除",
-      categoryFiltersDone: "完了",
-      newMarkerTitle: "新しいマーカー",
-      markerLabelPlaceholder: "ラベル(任意)",
-      markerCountLabel: "{count} / {limit} 件のマーカー",
-      markerLimitReached: "マーカーの上限に達しました({limit}件)",
-      markerSaveError: "マーカーを保存できませんでした。もう一度お試しください。",
-      markerCancel: "キャンセル",
-      markerSave: "保存",
-      markerSaving: "保存中…",
-      addMarkerToItinerary: "旅程に追加",
-      removeMarkerFromItinerary: "旅程から削除",
-      deleteMarker: "マーカーを削除",
-      deleteMarkerConfirm: "マーカーは完全に削除されます。",
-      now: "現在",
-      tomorrow: "明日",
-      seasonReminder: "あと{days}日で{city}で{season}シーズンが始まります",
-      seasonReminderToday: "本日{city}で{season}シーズンが始まります",
-      swipeDiscovery: "クイック選択",
-      swipeDiscoveryHint: "場所をスワイプ:気に入ったら保存、スキップで既読に",
-      swipeAffinityIntro: "好きなもの:",
-      swipeEmpty: "ここにある場所はすべて確認しました。",
-      swipeLike: "気に入り",
-      swipeSkip: "スキップ",
-      swipeProgress: "{total}件中{current}件目",
-      swipeClose: "閉じる",
-      swipeContinueHint: "近くの街で続ける",
-      swipeContinueIn: "{region} ・ {count}件"
-    },
-    tag: {
-      "must-visit": "必見",
-      photographer: "写真向き",
-      "first-visit": "初回向け",
-      nature: "自然",
-      autumn: "紅葉",
-      sakura: "桜",
-      "hidden-gem": "穴場",
-      sunrise: "日の出",
-      night: "夜",
-      rain: "雨天",
-      "public-transport": "公共交通",
-      "light-trekking": "軽い山歩き"
-    },
-    difficulty: { easy: "簡単", moderate: "普通", active: "上級" },
-    season: { spring: "春", summer: "夏", autumn: "秋", winter: "冬" },
-    auth: {
-      login: "ログイン",
-      register: "登録",
-      logout: "ログアウト",
-      email: "メールアドレス",
-      password: "パスワード",
-      name: "名前",
-      username: "ユーザー名",
-      usernameHint: "3〜20文字:半角英数字とアンダースコア",
-      editProfile: "プロフィールを編集",
-      save: "保存",
-      profileUpdated: "プロフィールを更新しました",
-      hideFromSearch: "フレンド検索に表示しない",
-      friendsTitle: "フレンド",
-      friendsSearchPlaceholder: "ユーザー名で検索",
-      friendsSearching: "検索中…",
-      friendsNoResults: "ユーザーが見つかりません",
-      friendsAdd: "追加",
-      friendsAlreadyFriends: "フレンド済み",
-      friendsRequestSent: "リクエスト送信済み",
-      friendsRespondBelow: "下で対応してください",
-      friendsIncomingTitle: "フレンドリクエスト",
-      friendsAccept: "承認",
-      friendsDecline: "拒否",
-      friendsOutgoingTitle: "送信済みリクエスト",
-      friendsCancel: "取消",
-      friendsListTitle: "フレンド一覧",
-      friendsLoading: "読み込み中…",
-      friendsEmpty: "まだフレンドがいません",
-      friendsRemove: "削除",
-      shareChecklist: "共有",
-      sharedChecklistsTitle: "共有されたチェックリスト",
-      shareItineraryWithFriend: "共有",
-      sharedItinerariesTitle: "共有されたルート",
-      heroTagline: "見つける。めぐる。心に刻む。",
-      loginTitle: "サインイン",
-      registerTitle: "アカウント作成",
-      loginSubtitle: "おかえりなさい！",
-      registerSubtitle: "Wayoraで旅を始めましょう",
-      confirmPassword: "パスワード（確認）",
-      passwordMismatch: "パスワードが一致しません",
-      continueWith: "または次で続ける",
-      comingSoon: "近日公開",
-      loginWithYandex: "Yandexでログイン",
-      yandexError: "Yandexでのログインに失敗しました。",
-      submit: "続ける",
-      switchToRegister: "アカウントをお持ちでない方は登録",
-      switchToLogin: "アカウントをお持ちの方はログイン",
-      savedPlaces: "保存した場所",
-      viewedPlaces: "閲覧した場所",
-      visitedPlaces: "訪問した場所",
-      noSavedPlaces: "保存した場所はまだありません",
-      noViewedPlaces: "閲覧した場所はまだありません",
-      noVisitedPlaces: "訪問した場所はまだありません",
-      chooseAvatar: "アバターを選択",
-      clearViewed: "消去",
-      clearViewedConfirm: "閲覧履歴をすべて消去しますか？この操作は元に戻せません。",
-      clearSaved: "消去",
-      clearSavedConfirm: "保存した場所をすべて消去しますか？この操作は元に戻せません。",
-      clearVisited: "消去",
-      clearVisitedConfirm: "訪問した場所をすべて消去しますか？この操作は元に戻せません。",
-      cancel: "キャンセル",
-      ok: "OK",
-      delete: "削除",
-      addToItinerary: "ルートに追加",
-      addAllToItinerary: "すべて追加",
-      addRegionToItinerary: "この地域の場所をすべてルートに追加",
-      favoritesStatsSaved: "保存した場所",
-      favoritesStatsRegions: "地域",
-      favoritesStatsDays: "旅行に十分な日数",
-      favoritesStatsDaysUnit: "日間",
-      favoritesCtaTitle: "素晴らしい！",
-      favoritesCtaBody: "{days}日間の旅行に十分な場所があります。",
-      favoritesCtaButton: "旅程を作成",
-      favoritesProgressTitle: "地域別の進捗",
-      favoritesProgressPlacesUnit: "件",
-      favoritesMapOpen: "地図を開く",
-      removeFromFavorites: "保存済みから削除",
-      inItinerary: "ルートに追加済み",
-      clearItinerary: "ルートを消去",
-      clearItineraryConfirm: "すべての日程と地点が削除されます。",
-      dayLabel: "{n}日目",
-      generateItinerary: "自動作成",
-      generateItineraryDays: "日数",
-      generateItineraryHoursPerDay: "1日の時間",
-      generateItinerarySourceFavorites: "お気に入り",
-      generateItinerarySourceRecommended: "おすすめ",
-      generateItinerarySubmit: "作成する",
-      generateItineraryConfirm: "現在のルートは置き換えられます。続けますか？",
-      generateItineraryEmpty: "ルートを作成できませんでした。別の都市や条件をお試しください。",
-      dayStart: "開始",
-      lunchBreak: "昼食",
-      addDay: "日を追加",
-      removeDay: "日を削除",
-      removeDayConfirm: "この日とすべての立ち寄り先を削除しますか？この操作は元に戻せません。",
-      dayPlaceCount: "{count}件",
-      newItinerary: "旅程を作成",
-      deleteItinerary: "旅程を削除",
-      deleteItineraryConfirm: "「{title}」は完全に削除されます。",
-      maxItinerariesReached: "旅程は最大3件までです。",
-      stopDurationCustom: "カスタム",
-      resetDuration: "リセット",
-      lunchStartTime: "後",
-      lunchDuration: "分",
-      tabRoute: "旅程",
-      tabSaved: "お気に入り",
-      tabHistory: "履歴",
-      tabProfile: "プロフィール",
-      tabMap: "地図",
-      pushNotificationsTitle: "プッシュ通知",
-      pushNotificationsHint: "季節のお知らせとWayoraのニュース",
-      pushNotificationsDenied: "通知はシステム設定でオフになっています",
-      nearbyAlertsTitle: "近くのロケーション",
-      nearbyAlertsHint: "お気に入りのロケーションから500m以内に入ったら通知します",
-      nearbyAlertsPermissionDenied: "「常に許可」の位置情報アクセスが必要です",
-      nearbyAlertsPermissionHint: "アプリを閉じていても近くのお気に入りを通知できるよう、設定で位置情報アクセスを許可してください。",
-      openSettings: "設定を開く",
-      offlineMapsTitle: "オフライン地図",
-      offlineMapsHint: "ダウンロード済みの地図を管理",
-      offlineMapDownload: "ダウンロード",
-      offlineMapDelete: "削除",
-      offlineMapDeleteConfirm: "「{name}」の地図を削除しますか？",
-      offlineMapDeleteConfirmBody: "ダウンロード済みのタイルは端末から削除されます。",
-      offlineMapDownloadError: "地図をダウンロードできませんでした。後でもう一度お試しください。",
-      offlineMapsDownloadedSummary: "{total}件中{count}件ダウンロード済み・使用容量 {size} MB",
-      offlineMapsEmpty: "ダウンロード済みの地図はまだありません。マップ画面から地域の地図をダウンロードしてください。",
-      offlineMapsInfoHint: "地域の地図をオフラインでダウンロードするには、マップ画面でその地域を開き、クラウドアイコンをタップしてください。",
-      statsSaved: "保存済み",
-      statsRoutes: "ルート",
-      travelerBadge: "旅行者",
-      notificationsCardTitle: "通知",
-      notificationHistoryTitle: "通知履歴",
-      notificationHistoryEmpty: "通知はまだありません",
-      appSettingsTitle: "アプリ設定",
-      themeTitle: "テーマ",
-      themeLight: "ライト",
-      themeDark: "ダーク",
-      themeSystem: "システムに合わせる",
-      unitsTitle: "距離の単位",
-      unitsKm: "km",
-      unitsMi: "マイル",
-      storageTitle: "ストレージとデータ",
-      clearCache: "キャッシュを削除",
-      clearCacheConfirmTitle: "キャッシュを削除しますか?",
-      clearCacheConfirmBody: "ダウンロード済みのオフライン写真が端末から削除されます。都市の地図はそのまま残ります。",
-      clearCacheDone: "キャッシュを削除しました",
-      resetSettings: "設定をリセット",
-      resetSettingsConfirmTitle: "設定をリセットしますか?",
-      resetSettingsConfirmBody: "テーマ、言語、単位、近くのロケーション通知が初期設定に戻ります。",
-      aboutTitle: "アプリについて",
-      aboutVersion: "バージョン",
-      aboutSupport: "サポート",
-      aboutWebsite: "wayora.ru ウェブサイト",
-      languageTitle: "アプリの言語",
-      logoutConfirmTitle: "ログアウトしますか？",
-      logoutConfirmBody: "ルートやお気に入りにアクセスするには再度ログインが必要です。",
-      myRoute: "自分のルート",
-      myRouteEmpty: "まだルートがありません",
-      createItinerary: "ルートを作成",
-      clearRoute: "消去",
-      clearRouteConfirm: "ルートは空です",
-      dayEmptyPlaceholder: "自動でルートを作成するか、日を手動で追加してください。",
-      saved: "お気に入り",
-      history: "履歴",
-      visited: "訪問した場所",
-      viewed: "閲覧した場所",
-      moveToDay: "この日に移動",
-      day: "日目",
-      startLabel: "開始",
-      lunchLabel: "昼食",
-      walkLabel: "分",
-      lunchAtLabel: "昼食",
-      resetLabel: "リセット",
-      buildRoute: "ルートを作成",
-      generate: "自動作成",
-      tripStartDate: "出発日を設定",
-      tripStartDateSet: "出発日: {date}",
-      city: "都市",
-      source: "場所のソース",
-      days: "日数",
-      hoursPerDay: "1日の時間",
-      searchPlacesPlaceholder: "場所を検索",
-      hourUnit: "時間",
-      mapPointFallbackName: "地図上の地点",
-      loginError: "メールアドレスまたはパスワードが正しくありません。",
-      registerError: "登録できませんでした。",
-      guestPrompt: "場所の保存、訪問済みのマーク、ルート作成にはログインが必要です",
-      bootErrorTitle: "データを読み込めませんでした",
-      bootErrorBody: "インターネット接続を確認してもう一度お試しください。",
-      retry: "再試行"
-    },
-    report: {
-      cta: "この説明に誤りがありましたか？",
-      title: "誤りを報告",
-      placeholder: "誤りの内容を記入してください...",
-      submit: "送信",
-      sending: "送信中…",
-      cancel: "キャンセル",
-      thanks: "フィードバックありがとうございます！近日中に確認します。",
-      close: "閉じる",
-      error: "送信できませんでした。もう一度お試しください。"
-    }
-  }
 };
 
 export function getTranslations(language: Language) {

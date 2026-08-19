@@ -14,6 +14,13 @@ import type { UserPoiState, User } from "@/entities/user/model/types";
 import type { Language } from "@/shared/i18n/types";
 const DEFAULT_CUSTOM_MARKER_LIMIT = 200;
 
+// Queued when a favorite/visited/viewed mutation's API call fails (e.g. no
+// network) — replayed in order once connectivity returns, via
+// flushPendingPoiActions. See explorer-store's persist config: while any of
+// these are queued, hydrateAuth must not let the server's poiState clobber
+// the (ahead-of-server) local favorites/viewed/visited arrays.
+type PendingPoiAction = { poiId: string; kind: "toggleFavorite" | "toggleVisited" | "markViewed" };
+
 import {
   toggleFavoriteApi,
   toggleVisitedApi,
@@ -55,12 +62,13 @@ type ExplorerState = {
   clearFavoritePois: () => void;
   clearVisitedPois: () => void;
   clearViewedPois: () => void;
+  pendingPoiActions: PendingPoiAction[];
+  flushPendingPoiActions: () => Promise<void>;
 
   // Auth
   currentUser: User | null;
   authStatus: "loading" | "guest" | "authenticated";
   hydrateAuth: (user: User | null, poiState?: UserPoiState) => void;
-  setAvatarId: (avatarId: string) => void;
   logout: () => void;
   isAuthModalOpen: boolean;
   openAuthModal: () => void;
@@ -72,8 +80,9 @@ type ExplorerState = {
   setPushToken: (token: string | null) => void;
 
   // Map/filter state
-  activeRegionId: string | null;
-  setActiveRegionId: (regionId: string) => void;
+  activeRegionIds: string[];
+  setActiveRegion: (regionId: string) => void;
+  setActiveCountry: (countryId: string) => void;
   selectedPoiId: string | null;
   setSelectedPoiId: (poiId: string | null) => void;
   selectedCategories: PoiMainCategory[];
@@ -105,6 +114,11 @@ type ExplorerState = {
   setActiveItineraryId: (itineraryId: string | null) => void;
   setItinerary: (itinerary: Itinerary | null) => void;
 
+  // Itineraries a friend shared with editor access — kept separate from
+  // `itineraries` so they don't count toward the per-user creation limit.
+  sharedEditableItineraries: (ItinerarySummary & { ownerName: string })[];
+  setSharedEditableItineraries: (itineraries: (ItinerarySummary & { ownerName: string })[]) => void;
+
   // Custom markers (Map screen)
   customMarkers: CustomMarker[];
   customMarkerLimit: number;
@@ -118,6 +132,22 @@ type ExplorerState = {
   downloadingProgress: Record<string, number>;
   setDownloadedRegionIds: (ids: string[]) => void;
   setRegionDownloadProgress: (regionId: string, percent: number | null) => void;
+
+  // Offline boot support — reference data (pois/regions/.../siteSettings) is
+  // persisted so a cold start with no network still has something to show;
+  // hasHydrated flips true once that persisted data has been read back from
+  // disk, and isOffline flags that we're currently running on that cache
+  // rather than a fresh bootstrap response.
+  hasHydrated: boolean;
+  setHasHydrated: (hydrated: boolean) => void;
+  isOffline: boolean;
+  setIsOffline: (offline: boolean) => void;
+
+  // Android 12+ lets the user grant only "approximate" location even when
+  // ACCESS_FINE_LOCATION is requested, which makes fixes coarser and less
+  // frequent — surfaced as a hint on the Map screen. null = not checked yet.
+  hasPreciseLocation: boolean | null;
+  setHasPreciseLocation: (precise: boolean) => void;
 };
 
 export const useExplorerStore = create<ExplorerState>()(
@@ -133,7 +163,12 @@ export const useExplorerStore = create<ExplorerState>()(
       setBootstrapData: (data) =>
         set((state) => ({
           ...data,
-          activeRegionId: state.activeRegionId ?? data.regions[0]?.id ?? null,
+          activeRegionIds:
+            state.activeRegionIds.length > 0 && state.activeRegionIds.every((id) => data.regions.some((r) => r.id === id))
+              ? state.activeRegionIds
+              : data.regions[0]
+                ? [data.regions[0].id]
+                : [],
           selectedCategories: state.selectedCategories.length > 0 ? state.selectedCategories : data.categories.map((c) => c.id)
         })),
 
@@ -146,7 +181,9 @@ export const useExplorerStore = create<ExplorerState>()(
             ? state.favorites.filter((id) => id !== poiId)
             : [...state.favorites, poiId]
         }));
-        toggleFavoriteApi(poiId).catch(() => {});
+        toggleFavoriteApi(poiId).catch(() => {
+          set((state) => ({ pendingPoiActions: [...state.pendingPoiActions, { poiId, kind: "toggleFavorite" }] }));
+        });
       },
       toggleVisited: (poiId) => {
         set((state) => ({
@@ -154,12 +191,16 @@ export const useExplorerStore = create<ExplorerState>()(
             ? state.visitedPoiIds.filter((id) => id !== poiId)
             : [...state.visitedPoiIds, poiId]
         }));
-        toggleVisitedApi(poiId).catch(() => {});
+        toggleVisitedApi(poiId).catch(() => {
+          set((state) => ({ pendingPoiActions: [...state.pendingPoiActions, { poiId, kind: "toggleVisited" }] }));
+        });
       },
       markPoiViewed: (poiId) => {
         if (get().viewedPoiIds.includes(poiId)) return;
         set((state) => ({ viewedPoiIds: [...state.viewedPoiIds, poiId] }));
-        markViewedApi(poiId).catch(() => {});
+        markViewedApi(poiId).catch(() => {
+          set((state) => ({ pendingPoiActions: [...state.pendingPoiActions, { poiId, kind: "markViewed" }] }));
+        });
       },
       clearFavoritePois: () => {
         set({ favorites: [] });
@@ -173,24 +214,41 @@ export const useExplorerStore = create<ExplorerState>()(
         set({ viewedPoiIds: [] });
         clearViewedApi().catch(() => {});
       },
+      pendingPoiActions: [],
+      flushPendingPoiActions: async () => {
+        const queue = get().pendingPoiActions;
+        for (let i = 0; i < queue.length; i++) {
+          const item = queue[i];
+          try {
+            if (item.kind === "toggleFavorite") await toggleFavoriteApi(item.poiId);
+            else if (item.kind === "toggleVisited") await toggleVisitedApi(item.poiId);
+            else await markViewedApi(item.poiId);
+          } catch {
+            set({ pendingPoiActions: queue.slice(i) });
+            return;
+          }
+        }
+        set({ pendingPoiActions: [] });
+      },
 
       currentUser: null,
       authStatus: "loading",
       hydrateAuth: (user, poiState) =>
-        set({
+        set((state) => ({
           currentUser: user,
           authStatus: user ? "authenticated" : "guest",
           ...(user ? { isAuthModalOpen: false } : {}),
-          ...(user && poiState
+          // Skip while actions are queued — the local arrays are ahead of the
+          // server (see pendingPoiActions/flushPendingPoiActions) and would
+          // otherwise get clobbered back to the stale server state here.
+          ...(user && poiState && state.pendingPoiActions.length === 0
             ? {
                 favorites: poiState.favoritePoiIds,
                 viewedPoiIds: poiState.viewedPoiIds,
                 visitedPoiIds: poiState.visitedPoiIds
               }
             : {})
-        }),
-      setAvatarId: (avatarId) =>
-        set((state) => (state.currentUser ? { currentUser: { ...state.currentUser, avatarId } } : {})),
+        })),
       pushToken: null,
       setPushToken: (token) => set({ pushToken: token }),
       logout: () =>
@@ -203,14 +261,26 @@ export const useExplorerStore = create<ExplorerState>()(
           selectedPoiId: null,
           itinerary: null,
           itineraries: [],
-          activeItineraryId: null
+          activeItineraryId: null,
+          sharedEditableItineraries: []
         }),
       isAuthModalOpen: false,
       openAuthModal: () => set({ isAuthModalOpen: true }),
       closeAuthModal: () => set({ isAuthModalOpen: false }),
 
-      activeRegionId: null,
-      setActiveRegionId: (regionId) => set({ activeRegionId: regionId, selectedPoiId: null }),
+      activeRegionIds: [],
+      setActiveRegion: (regionId) => set({ activeRegionIds: [regionId], selectedPoiId: null }),
+      setActiveCountry: (countryId) =>
+        set((state) => {
+          const countryAreaIds = state.areas.filter((area) => area.countryId === countryId).map((area) => area.id);
+          const countryRegionIds = state.regions
+            .filter((region) => countryAreaIds.includes(region.areaId))
+            .map((region) => region.id);
+          return {
+            activeRegionIds: countryRegionIds.length > 0 ? countryRegionIds : state.activeRegionIds,
+            selectedPoiId: null
+          };
+        }),
       selectedPoiId: null,
       setSelectedPoiId: (poiId) => set({ selectedPoiId: poiId }),
       selectedCategories: [],
@@ -242,6 +312,8 @@ export const useExplorerStore = create<ExplorerState>()(
       activeItineraryId: null,
       itinerary: null,
       setItineraries: (itineraries) => set({ itineraries }),
+      sharedEditableItineraries: [],
+      setSharedEditableItineraries: (itineraries) => set({ sharedEditableItineraries: itineraries }),
       customMarkers: [],
       customMarkerLimit: DEFAULT_CUSTOM_MARKER_LIMIT,
       setCustomMarkers: (markers, limit) => set({ customMarkers: markers, customMarkerLimit: limit }),
@@ -260,19 +332,61 @@ export const useExplorerStore = create<ExplorerState>()(
           if (percent == null) delete next[regionId];
           else next[regionId] = percent;
           return { downloadingProgress: next };
-        })
+        }),
+
+      hasHydrated: false,
+      setHasHydrated: (hydrated) => set({ hasHydrated: hydrated }),
+      isOffline: false,
+      setIsOffline: (offline) => set({ isOffline: offline }),
+      hasPreciseLocation: null,
+      setHasPreciseLocation: (precise) => set({ hasPreciseLocation: precise })
     }),
     {
       name: "wayora-settings",
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         language: state.language,
-        activeRegionId: state.activeRegionId,
+        activeRegionIds: state.activeRegionIds,
+        // Not persisting this would leave it [] on a cold offline start
+        // (setBootstrapData, which backfills "all categories" when empty,
+        // never runs offline) — every POI would then fail the
+        // selectedCategories.includes() filter in MapScreen's visiblePois.
+        selectedCategories: state.selectedCategories,
         pushToken: state.pushToken,
         isNearbyAlertsEnabled: state.isNearbyAlertsEnabled,
         themeMode: state.themeMode,
-        distanceUnit: state.distanceUnit
-      })
+        distanceUnit: state.distanceUnit,
+        // Reference data cached for offline cold-starts — see hasHydrated.
+        pois: state.pois,
+        regions: state.regions,
+        countries: state.countries,
+        areas: state.areas,
+        categories: state.categories,
+        siteSettings: state.siteSettings,
+        // Personal POI state cached for offline cold-starts, plus the queue
+        // of mutations that haven't reached the server yet (see hydrateAuth).
+        favorites: state.favorites,
+        viewedPoiIds: state.viewedPoiIds,
+        visitedPoiIds: state.visitedPoiIds,
+        pendingPoiActions: state.pendingPoiActions
+      }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      }
     }
   )
 );
+
+// Resolves once persisted state has been read back from AsyncStorage, so
+// callers can reliably tell "no cached data" apart from "cache not read yet".
+export function waitForStoreHydration(): Promise<void> {
+  if (useExplorerStore.getState().hasHydrated) return Promise.resolve();
+  return new Promise((resolve) => {
+    const unsubscribe = useExplorerStore.subscribe((state) => {
+      if (state.hasHydrated) {
+        unsubscribe();
+        resolve();
+      }
+    });
+  });
+}
