@@ -1,26 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Modal, PermissionsAndroid, Platform, Pressable, StyleSheet, TouchableOpacity, View } from "react-native";
+import { useMemo, useState } from "react";
+import { ActivityIndicator, Modal, Pressable, StyleSheet, TouchableOpacity, View } from "react-native";
 import { Text } from "@/shared/ui/AppText";
 import { Ionicons } from "@expo/vector-icons";
 import { NavigationContainer } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { LocationManager } from "@maplibre/maplibre-react-native";
-import * as Notifications from "expo-notifications";
-import { getBootstrap } from "@/shared/api/bootstrap";
-import { getMe } from "@/shared/api/auth";
-import { registerPushTokenApi } from "@/shared/api/push-notifications";
-import { useExplorerStore, waitForStoreHydration } from "@/shared/model/explorer-store";
+import { useExplorerStore } from "@/shared/model/explorer-store";
 import { useTranslations } from "@/shared/i18n/useTranslations";
-import { requestDevicePushToken } from "@/shared/notifications/push";
-import { refreshNearbyGeofences } from "@/shared/geofencing/manage-geofences";
-import { NEARBY_POI_NOTIFICATION_TYPE } from "@/shared/geofencing/nearby-locations-task";
-import { addNotificationHistoryEntry } from "@/shared/storage/notification-history";
 import { useTheme } from "@/shared/theme/useTheme";
 import type { ThemeColors } from "@/shared/theme/colors";
 import { LoadingScreen } from "@/screens/LoadingScreen";
 import { AuthScreen } from "@/screens/auth/AuthScreen";
 import { WelcomeIntro } from "@/components/WelcomeIntro";
 import { TabNavigator, navigationRef } from "./TabNavigator";
+import { useAppBootstrap } from "./hooks/useAppBootstrap";
+import { useInitialPermissionsAndPush } from "./hooks/useInitialPermissionsAndPush";
+import { useNearbyAlertsRefresh } from "./hooks/useNearbyAlertsRefresh";
+import { useNotificationRouting } from "./hooks/useNotificationRouting";
 
 export function RootNavigator() {
   const t = useTranslations();
@@ -28,151 +23,20 @@ export function RootNavigator() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const authStatus = useExplorerStore((state) => state.authStatus);
-  const hydrateAuth = useExplorerStore((state) => state.hydrateAuth);
-  const setBootstrapData = useExplorerStore((state) => state.setBootstrapData);
-  const setPushToken = useExplorerStore((state) => state.setPushToken);
   const isAuthModalOpen = useExplorerStore((state) => state.isAuthModalOpen);
   const closeAuthModal = useExplorerStore((state) => state.closeAuthModal);
-  const isNearbyAlertsEnabled = useExplorerStore((state) => state.isNearbyAlertsEnabled);
   const isOffline = useExplorerStore((state) => state.isOffline);
-  const setIsOffline = useExplorerStore((state) => state.setIsOffline);
-  const setHasPreciseLocation = useExplorerStore((state) => state.setHasPreciseLocation);
-  const flushPendingPoiActions = useExplorerStore((state) => state.flushPendingPoiActions);
-  const favorites = useExplorerStore((state) => state.favorites);
   const pois = useExplorerStore((state) => state.pois);
-  const language = useExplorerStore((state) => state.language);
-  const setActiveRegion = useExplorerStore((state) => state.setActiveRegion);
-  const setSelectedPoiId = useExplorerStore((state) => state.setSelectedPoiId);
-  const hasRequestedPushPermission = useRef(false);
-  const [bootError, setBootError] = useState(false);
-  const [isRetrying, setIsRetrying] = useState(false);
   const [showIntro, setShowIntro] = useState(true);
+
+  const { bootError, isRetrying, handleRetry } = useAppBootstrap();
+  useInitialPermissionsAndPush();
+  useNearbyAlertsRefresh();
+  useNotificationRouting();
 
   function handleIntroFinish() {
     setShowIntro(false);
   }
-
-  const loadBootstrap = useCallback(async () => {
-    try {
-      const [me, bootstrap] = await Promise.all([getMe(), getBootstrap()]);
-      hydrateAuth(
-        me.user,
-        me.user
-          ? {
-              favoritePoiIds: me.favoritePoiIds ?? [],
-              viewedPoiIds: me.viewedPoiIds ?? [],
-              visitedPoiIds: me.visitedPoiIds ?? []
-            }
-          : undefined
-      );
-      setBootstrapData(bootstrap);
-      setIsOffline(false);
-      setBootError(false);
-      flushPendingPoiActions();
-    } catch {
-      // Network/server failure — fall back to whatever reference data is
-      // cached on-device (see explorer-store's persist partialize) instead
-      // of hard-blocking the whole app. Only show the error screen when
-      // there's truly nothing to fall back to (e.g. very first launch with
-      // no network). hasHydrated may not have flipped yet if AsyncStorage
-      // hasn't finished reading, so wait for it before deciding.
-      await waitForStoreHydration();
-      const hasCachedData = useExplorerStore.getState().regions.length > 0;
-      if (hasCachedData) {
-        hydrateAuth(null);
-        setIsOffline(true);
-        setBootError(false);
-      } else {
-        setBootError(true);
-      }
-    } finally {
-      setIsRetrying(false);
-    }
-  }, [hydrateAuth, setBootstrapData, setIsOffline, flushPendingPoiActions]);
-
-  useEffect(() => {
-    loadBootstrap();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // While running on cached data with no network, periodically retry the
-  // bootstrap fetch in the background so the app recovers on its own once
-  // connectivity returns, instead of requiring a manual restart.
-  useEffect(() => {
-    if (!isOffline) return;
-    const interval = setInterval(() => {
-      loadBootstrap();
-    }, 20000);
-    return () => clearInterval(interval);
-  }, [isOffline, loadBootstrap]);
-
-  function handleRetry() {
-    setIsRetrying(true);
-    loadBootstrap();
-  }
-
-  // Requested once per app session, right after the user's first successful
-  // auth — this is the app's "first launch" moment from the user's
-  // perspective. <UserLocation> on MapScreen doesn't prompt for permission
-  // on its own (confirmed empirically — ACCESS_FINE_LOCATION stayed
-  // ungranted after Map mounted), so it's requested explicitly here via the
-  // same PermissionsAndroid path MapLibre's own LocationManager uses.
-  useEffect(() => {
-    if (authStatus === "loading" || hasRequestedPushPermission.current) return;
-    hasRequestedPushPermission.current = true;
-    LocationManager.requestPermissions()
-      .then(() => {
-        if (Platform.OS !== "android") return;
-        return PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION).then(setHasPreciseLocation);
-      })
-      .catch(() => {});
-    requestDevicePushToken()
-      .then((token) => {
-        if (!token) return;
-        setPushToken(token);
-        registerPushTokenApi(token).catch(() => {});
-      })
-      .catch(() => {});
-  }, [authStatus, setPushToken, setHasPreciseLocation]);
-
-  useEffect(() => {
-    if (!isNearbyAlertsEnabled) return;
-    const favoritePois = pois.filter((poi) => favorites.includes(poi.id));
-    refreshNearbyGeofences(favoritePois, language).catch(() => {});
-  }, [isNearbyAlertsEnabled, favorites, pois, language]);
-
-  useEffect(() => {
-    function handleNotificationResponse(response: Notifications.NotificationResponse) {
-      const data = response.notification.request.content.data as { type?: string; poiId?: string; regionId?: string };
-      if (data?.type !== NEARBY_POI_NOTIFICATION_TYPE || !data.poiId) return;
-      if (data.regionId) setActiveRegion(data.regionId);
-      setSelectedPoiId(data.poiId);
-      if (navigationRef.isReady()) navigationRef.navigate("Map");
-    }
-
-    Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (response) handleNotificationResponse(response);
-    });
-    const subscription = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
-    return () => subscription.remove();
-  }, [setActiveRegion, setSelectedPoiId]);
-
-  // Remote (FCM) pushes only — the geofencing task already logs nearby-POI
-  // notifications directly so they still show up even if the app was killed.
-  useEffect(() => {
-    const subscription = Notifications.addNotificationReceivedListener((notification) => {
-      const content = notification.request.content;
-      const data = content.data as { type?: string } | undefined;
-      if (data?.type === NEARBY_POI_NOTIFICATION_TYPE) return;
-      addNotificationHistoryEntry({
-        title: content.title ?? "",
-        body: content.body ?? "",
-        receivedAt: Date.now(),
-        data
-      }).catch(() => {});
-    });
-    return () => subscription.remove();
-  }, []);
 
   let content;
   if (bootError) {
