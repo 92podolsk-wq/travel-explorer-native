@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, Share, StyleSheet, TouchableOpacity, View } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
 import { Text } from "@/shared/ui/AppText";
 import { TextInput } from "@/shared/ui/AppTextInput";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -9,8 +8,8 @@ import { NestableScrollContainer } from "react-native-draggable-flatlist";
 import { useTranslations } from "@/shared/i18n/useTranslations";
 import { useExplorerStore } from "@/shared/model/explorer-store";
 import { API_ORIGIN } from "@/shared/api/client";
-import { getToken } from "@/shared/storage/token-storage";
 import { useEnsureItineraryLoaded } from "@/shared/model/use-ensure-itinerary";
+import { useItineraryRealtime } from "@/shared/realtime/useItineraryRealtime";
 import {
   addItineraryDay,
   addItineraryStop,
@@ -63,14 +62,10 @@ export function RouteScreen() {
   const { isLoading: isLoadingList } = useEnsureItineraryLoaded();
   const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
   const [isAddStopOpen, setIsAddStopOpen] = useState(false);
-  const [presenceUsers, setPresenceUsers] = useState<
-    { id: string; name: string | null; username: string; avatarId: string | null }[]
-  >([]);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const currentUser = useExplorerStore((state) => state.currentUser);
-  const otherPresenceUsers = presenceUsers.filter((u) => u.id !== currentUser?.id);
   const [isFriendShareOpen, setIsFriendShareOpen] = useState(false);
   const [shareFriends, setShareFriends] = useState<FriendUser[]>([]);
   const [itineraryShareRoles, setItineraryShareRoles] = useState<Map<string, ItineraryShareRole>>(new Map());
@@ -124,90 +119,19 @@ export function RouteScreen() {
   }, [itinerary]);
 
   // Companions co-editing the same shared itinerary see each other's changes
-  // via the WebSocket below almost instantly; this refetch-on-focus + slow
-  // poll is just the fallback for whenever the socket is down (e.g. briefly
-  // backgrounded on mobile), so the trip still stays in sync without a
-  // manual restart.
-  useFocusEffect(
-    useCallback(() => {
-      if (!activeItineraryId) return;
-      let cancelled = false;
-      const refresh = () => {
-        getItinerary(activeItineraryId)
-          .then((full) => {
-            if (!cancelled) setItinerary(full);
-          })
-          .catch(() => {});
-      };
-      refresh();
-      const interval = setInterval(refresh, 45000);
-      return () => {
-        cancelled = true;
-        clearInterval(interval);
-      };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeItineraryId])
-  );
+  // via useItineraryRealtime's WebSocket almost instantly; its focus-refetch
+  // + slow poll is just the fallback for whenever the socket is down (e.g.
+  // briefly backgrounded on mobile), so the trip still stays in sync
+  // without a manual restart.
+  const refreshItinerary = useCallback(() => {
+    if (!activeItineraryId) return;
+    getItinerary(activeItineraryId)
+      .then((full) => setItinerary(full))
+      .catch(() => {});
+  }, [activeItineraryId, setItinerary]);
 
-  useEffect(() => {
-    const itineraryId = activeItineraryId;
-    if (!itineraryId) return;
-    let cancelled = false;
-    let socket: WebSocket | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-
-    // RN's WebSocket supports a 3rd `{ headers }` argument for custom
-    // headers (used here for the bearer token) — a runtime extension the
-    // standard lib's WebSocket type doesn't know about.
-    const RNWebSocket = WebSocket as unknown as new (
-      url: string,
-      protocols: undefined,
-      options: { headers: Record<string, string> }
-    ) => WebSocket;
-
-    const connect = async () => {
-      if (cancelled) return;
-      const token = await getToken();
-      if (!token || cancelled) return;
-
-      socket = new RNWebSocket(`${API_ORIGIN.replace("https:", "wss:").replace("http:", "ws:")}/realtime`, undefined, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      socket.onopen = () => {
-        socket?.send(JSON.stringify({ type: "subscribe", itineraryId }));
-      };
-
-      socket.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data as string);
-          if (message.type === "itinerary:updated" && message.itineraryId === itineraryId) {
-            getItinerary(itineraryId).then((full) => {
-              if (!cancelled) setItinerary(full);
-            });
-          } else if (message.type === "presence" && message.itineraryId === itineraryId) {
-            if (!cancelled) setPresenceUsers(message.users);
-          }
-        } catch {
-          // ignore malformed frames
-        }
-      };
-
-      socket.onclose = () => {
-        if (!cancelled) setPresenceUsers([]);
-        if (!cancelled) reconnectTimer = setTimeout(connect, 3000);
-      };
-    };
-
-    connect();
-
-    return () => {
-      cancelled = true;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      socket?.close();
-      setPresenceUsers([]);
-    };
-  }, [activeItineraryId]);
+  const presenceUsers = useItineraryRealtime(activeItineraryId, refreshItinerary);
+  const otherPresenceUsers = presenceUsers.filter((u) => u.id !== currentUser?.id);
 
   async function handleStartDateChange(event: { type: string }, selectedDate?: Date) {
     setIsDatePickerOpen(false);
