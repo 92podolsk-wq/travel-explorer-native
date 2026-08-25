@@ -7,25 +7,15 @@ import { Text } from "@/shared/ui/AppText";
 import { TextInput } from "@/shared/ui/AppTextInput";
 import { Image } from "expo-image";
 import { avatarIds } from "@/entities/user/model/avatars";
-import { revokeToken, updateAvatar, updateProfile } from "@/shared/api/auth";
-import { ApiError } from "@/shared/api/client";
+import { revokeToken } from "@/shared/api/auth";
 import { AnimatedCenterModal } from "@/components/AnimatedModal";
-import { registerPushTokenApi, unregisterPushTokenApi } from "@/shared/api/push-notifications";
 import { useTranslations } from "@/shared/i18n/useTranslations";
 import { formatLastSeen } from "@/shared/lib/format-last-seen";
-import {
-  clearAllOfflinePhotoCache,
-  deleteRegionOffline,
-  deleteRegionPhotos,
-  getOfflineStorageBytesByRegion,
-  resolveOfflinePhotoUri
-} from "@/shared/map/offline-maps";
+import { clearAllOfflinePhotoCache } from "@/shared/map/offline-maps";
 import { useExplorerStore } from "@/shared/model/explorer-store";
-import { getNotificationPermissionStatus, requestDevicePushToken } from "@/shared/notifications/push";
 import { clearToken, getToken } from "@/shared/storage/token-storage";
 import { getUnreadNotificationCount } from "@/shared/storage/notification-history";
 import { ProfileAvatar } from "@/shared/ui/ProfileAvatar";
-import { refreshNearbyGeofences, requestNearbyAlertsPermissions, stopNearbyGeofencing } from "@/shared/geofencing/manage-geofences";
 import { useTheme } from "@/shared/theme/useTheme";
 import type { ThemeColors } from "@/shared/theme/colors";
 import { LanguagePickerModal, LANGUAGE_LABELS } from "@/components/LanguagePickerModal";
@@ -35,6 +25,10 @@ import { FriendsCard } from "@/components/profile/FriendsCard";
 import { SharedChecklistsCard } from "@/components/profile/SharedChecklistsCard";
 import { SharedItinerariesCard } from "@/components/profile/SharedItinerariesCard";
 import { SharedTripModal } from "@/components/SharedTripModal";
+import { useProfileEditor } from "./hooks/useProfileEditor";
+import { usePushNotificationToggle } from "./hooks/usePushNotificationToggle";
+import { useNearbyAlertsToggle } from "./hooks/useNearbyAlertsToggle";
+import { useOfflineMapsManager } from "./hooks/useOfflineMapsManager";
 
 const APP_VERSION = "1.0.0";
 
@@ -52,155 +46,44 @@ export function ProfileScreen() {
   const setDistanceUnit = useExplorerStore((state) => state.setDistanceUnit);
   const logout = useExplorerStore((state) => state.logout);
   const regions = useExplorerStore((state) => state.regions);
-  const pois = useExplorerStore((state) => state.pois);
-  const pushToken = useExplorerStore((state) => state.pushToken);
-  const setPushToken = useExplorerStore((state) => state.setPushToken);
   const openAuthModal = useExplorerStore((state) => state.openAuthModal);
   const favorites = useExplorerStore((state) => state.favorites);
   const visitedPoiIds = useExplorerStore((state) => state.visitedPoiIds);
   const itineraries = useExplorerStore((state) => state.itineraries);
-  const isNearbyAlertsEnabled = useExplorerStore((state) => state.isNearbyAlertsEnabled);
-  const setNearbyAlertsEnabled = useExplorerStore((state) => state.setNearbyAlertsEnabled);
-  const downloadedRegionIds = useExplorerStore((state) => state.downloadedRegionIds);
-  const setDownloadedRegionIds = useExplorerStore((state) => state.setDownloadedRegionIds);
 
-  const hydrateAuth = useExplorerStore((state) => state.hydrateAuth);
+  const {
+    isAvatarPickerOpen,
+    setIsAvatarPickerOpen,
+    isEditProfileOpen,
+    setIsEditProfileOpen,
+    nameDraft,
+    setNameDraft,
+    usernameDraft,
+    setUsernameDraft,
+    profileError,
+    isSavingProfile,
+    hideFromSearchDraft,
+    setHideFromSearchDraft,
+    handleSelectAvatar,
+    handleStartEditProfile,
+    handleSaveProfile
+  } = useProfileEditor();
+  const { pushToken, isTogglingNotifications, handleToggleNotifications } = usePushNotificationToggle();
+  const { isNearbyAlertsEnabled, isTogglingNearbyAlerts, handleToggleNearbyAlerts } = useNearbyAlertsToggle();
+  const { regionBytes, downloadedRegions, totalOfflineBytes, regionThumbnail, handleRegionMenu, handleOfflineInfo } =
+    useOfflineMapsManager();
 
-  const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
-  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
-  const [nameDraft, setNameDraft] = useState("");
-  const [usernameDraft, setUsernameDraft] = useState("");
-  const [profileError, setProfileError] = useState<string | null>(null);
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const [hideFromSearchDraft, setHideFromSearchDraft] = useState(false);
   const [openSharedTripId, setOpenSharedTripId] = useState<string | null>(null);
   const [isLanguagePickerOpen, setIsLanguagePickerOpen] = useState(false);
   const [isNotificationHistoryOpen, setIsNotificationHistoryOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [isTogglingNotifications, setIsTogglingNotifications] = useState(false);
-  const [isTogglingNearbyAlerts, setIsTogglingNearbyAlerts] = useState(false);
-  const [regionBytes, setRegionBytes] = useState<Record<string, number>>({});
   const [unreadCount, setUnreadCount] = useState(0);
-
-  useEffect(() => {
-    getOfflineStorageBytesByRegion(downloadedRegionIds, pois).then(setRegionBytes);
-  }, [downloadedRegionIds, pois]);
 
   useFocusEffect(
     useCallback(() => {
       getUnreadNotificationCount().then(setUnreadCount);
     }, [])
   );
-
-  async function handleSelectAvatar(avatarId: string) {
-    try {
-      const { user } = await updateAvatar(avatarId);
-      hydrateAuth(user);
-      setIsAvatarPickerOpen(false);
-    } catch (err) {
-      const serverMessage = err instanceof ApiError && (err.body as { error?: string } | null)?.error;
-      Alert.alert(t.auth.registerError, serverMessage || undefined);
-    }
-  }
-
-  function handleStartEditProfile() {
-    setNameDraft(currentUser?.name ?? "");
-    setUsernameDraft(currentUser?.username ?? "");
-    setHideFromSearchDraft(currentUser?.hideFromSearch ?? false);
-    setProfileError(null);
-    setIsEditProfileOpen(true);
-  }
-
-  async function handleSaveProfile() {
-    setProfileError(null);
-    setIsSavingProfile(true);
-    try {
-      const { user } = await updateProfile(nameDraft, usernameDraft, hideFromSearchDraft);
-      hydrateAuth(user);
-      setIsEditProfileOpen(false);
-    } catch (err) {
-      const serverMessage = err instanceof ApiError && (err.body as { error?: string } | null)?.error;
-      setProfileError(serverMessage || t.auth.registerError);
-    } finally {
-      setIsSavingProfile(false);
-    }
-  }
-
-  async function handleToggleNotifications(value: boolean) {
-    setIsTogglingNotifications(true);
-    try {
-      if (value) {
-        const status = await getNotificationPermissionStatus();
-        if (status === "denied") {
-          Alert.alert(t.auth.pushNotificationsDenied, t.auth.pushNotificationsHint, [
-            { text: t.auth.cancel, style: "cancel" },
-            { text: t.auth.openSettings, onPress: () => Linking.openSettings() }
-          ]);
-          return;
-        }
-        const token = await requestDevicePushToken();
-        if (token) {
-          setPushToken(token);
-          await registerPushTokenApi(token).catch(() => {});
-        }
-      } else if (pushToken) {
-        await unregisterPushTokenApi(pushToken).catch(() => {});
-        setPushToken(null);
-      }
-    } finally {
-      setIsTogglingNotifications(false);
-    }
-  }
-
-  async function handleToggleNearbyAlerts(value: boolean) {
-    setIsTogglingNearbyAlerts(true);
-    try {
-      if (value) {
-        const granted = await requestNearbyAlertsPermissions();
-        if (!granted) {
-          Alert.alert(t.auth.nearbyAlertsPermissionDenied, t.auth.nearbyAlertsPermissionHint, [
-            { text: t.auth.cancel, style: "cancel" },
-            { text: t.auth.openSettings, onPress: () => Linking.openSettings() }
-          ]);
-          return;
-        }
-        setNearbyAlertsEnabled(true);
-        const favoritePois = pois.filter((poi) => favorites.includes(poi.id));
-        await refreshNearbyGeofences(favoritePois, language);
-      } else {
-        setNearbyAlertsEnabled(false);
-        await stopNearbyGeofencing();
-      }
-    } finally {
-      setIsTogglingNearbyAlerts(false);
-    }
-  }
-
-  function handleDeleteRegion(regionId: string, regionName: string) {
-    Alert.alert(t.auth.offlineMapDeleteConfirm.replace("{name}", regionName), t.auth.offlineMapDeleteConfirmBody, [
-      { text: t.auth.cancel, style: "cancel" },
-      {
-        text: t.auth.delete,
-        style: "destructive",
-        onPress: async () => {
-          await deleteRegionOffline(regionId);
-          deleteRegionPhotos(pois.filter((p) => p.regionId === regionId));
-          setDownloadedRegionIds(downloadedRegionIds.filter((id) => id !== regionId));
-        }
-      }
-    ]);
-  }
-
-  function handleRegionMenu(regionId: string, regionName: string) {
-    Alert.alert(regionName, undefined, [
-      { text: t.auth.cancel, style: "cancel" },
-      { text: t.auth.offlineMapDelete, style: "destructive", onPress: () => handleDeleteRegion(regionId, regionName) }
-    ]);
-  }
-
-  function handleOfflineInfo() {
-    Alert.alert(t.auth.offlineMapsTitle, t.auth.offlineMapsInfoHint);
-  }
 
   function handleClearCache() {
     Alert.alert(t.auth.clearCacheConfirmTitle, t.auth.clearCacheConfirmBody, [
@@ -227,8 +110,7 @@ export function ProfileScreen() {
           setLanguage("ru");
           setDistanceUnit("km");
           if (isNearbyAlertsEnabled) {
-            setNearbyAlertsEnabled(false);
-            await stopNearbyGeofencing();
+            await handleToggleNearbyAlerts(false);
           }
         }
       }
@@ -257,15 +139,6 @@ export function ProfileScreen() {
       { text: t.auth.logout, style: "destructive", onPress: handleLogout }
     ]);
   }
-
-  function regionThumbnail(regionId: string): string | null {
-    const regionPois = pois.filter((p) => p.regionId === regionId && p.photos.length > 0);
-    const photo = [...regionPois].sort((a, b) => b.importance - a.importance)[0]?.photos[0];
-    return photo ? resolveOfflinePhotoUri(photo.id, photo.url) : null;
-  }
-
-  const downloadedRegions = regions.filter((region) => downloadedRegionIds.includes(region.id));
-  const totalOfflineBytes = Object.values(regionBytes).reduce((sum, bytes) => sum + bytes, 0);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
