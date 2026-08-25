@@ -14,17 +14,10 @@ import { Ionicons } from "@expo/vector-icons";
 import Svg, { Circle, Defs, Ellipse, LinearGradient, Line, Path, Rect, Stop } from "react-native-svg";
 import { Text } from "@/shared/ui/AppText";
 import { TextInput } from "@/shared/ui/AppTextInput";
-import { login, register, loginWithYandex, getMe } from "@/shared/api/auth";
-import { ApiError } from "@/shared/api/client";
-import { saveToken } from "@/shared/storage/token-storage";
-import { useExplorerStore } from "@/shared/model/explorer-store";
 import { useTranslations } from "@/shared/i18n/useTranslations";
 import { useTheme } from "@/shared/theme/useTheme";
 import type { ThemeColors } from "@/shared/theme/colors";
-import type { AuthMeResponse, User } from "@/entities/user/model/types";
-import { yandexLogin } from "react-native-yandex-login";
-
-type Mode = "login" | "register";
+import { useAuthForm } from "./useAuthForm";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const HERO_HEIGHT = 230;
@@ -116,69 +109,25 @@ export function AuthScreen() {
   const t = useTranslations();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const hydrateAuth = useExplorerStore((state) => state.hydrateAuth);
-  const [mode, setMode] = useState<Mode>("login");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [name, setName] = useState("");
-  const [username, setUsername] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isYandexSubmitting, setIsYandexSubmitting] = useState(false);
-
-  function applyAuthUser(user: User | null, me: AuthMeResponse) {
-    hydrateAuth(
-      user,
-      user
-        ? {
-            favoritePoiIds: me.favoritePoiIds ?? [],
-            viewedPoiIds: me.viewedPoiIds ?? [],
-            visitedPoiIds: me.visitedPoiIds ?? []
-          }
-        : undefined
-    );
-  }
-
-  async function handleSubmit() {
-    setError(null);
-
-    if (mode === "register" && password !== confirmPassword) {
-      setError(t.auth.passwordMismatch);
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const { token } =
-        mode === "login" ? await login(email, password) : await register(email, password, username, name || undefined);
-      await saveToken(token);
-      const me = await getMe();
-      applyAuthUser(me.user, me);
-    } catch (err) {
-      const serverMessage = err instanceof ApiError && (err.body as { error?: string } | null)?.error;
-      setError(serverMessage || (mode === "login" ? t.auth.loginError : t.auth.registerError));
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  async function handleYandexLogin() {
-    setError(null);
-    setIsYandexSubmitting(true);
-    try {
-      const { token: yandexToken } = await yandexLogin();
-      const { token } = await loginWithYandex(yandexToken);
-      await saveToken(token);
-      const me = await getMe();
-      applyAuthUser(me.user, me);
-    } catch (err) {
-      const serverMessage = err instanceof ApiError && (err.body as { error?: string } | null)?.error;
-      setError(serverMessage || t.auth.yandexError);
-    } finally {
-      setIsYandexSubmitting(false);
-    }
-  }
+  const {
+    mode,
+    setMode,
+    email,
+    setEmail,
+    password,
+    setPassword,
+    confirmPassword,
+    setConfirmPassword,
+    name,
+    setName,
+    username,
+    setUsername,
+    error,
+    isSubmitting,
+    isYandexSubmitting,
+    handleSubmit,
+    handleYandexLogin
+  } = useAuthForm();
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
