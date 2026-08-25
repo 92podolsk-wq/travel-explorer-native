@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ComponentType, RefObject } from "react";
 import {
   ActivityIndicator,
@@ -29,10 +29,8 @@ import Animated, {
 import type { Poi } from "@/entities/poi/model/types";
 import type { Language } from "@/shared/i18n/types";
 import { API_ORIGIN } from "@/shared/api/client";
-import { submitPoiReport } from "@/shared/api/reports";
 import { useTranslations } from "@/shared/i18n/useTranslations";
 import { useExplorerStore } from "@/shared/model/explorer-store";
-import { haversineDistanceMeters } from "@/shared/lib/geo";
 import { AnimatedCenterModal } from "@/components/AnimatedModal";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { AnimatedPressable } from "@/components/AnimatedPressable";
@@ -40,6 +38,9 @@ import { PhotoViewerModal } from "@/components/PhotoViewerModal";
 import { resolveOfflinePhotoUri } from "@/shared/map/offline-maps";
 import { useTheme } from "@/shared/theme/useTheme";
 import type { ThemeColors } from "@/shared/theme/colors";
+import { usePoiSheetNavigation } from "@/components/poi-detail-sheet/usePoiSheetNavigation";
+import { usePoiReport } from "@/components/poi-detail-sheet/usePoiReport";
+import { usePhotoPager } from "@/components/poi-detail-sheet/usePhotoPager";
 
 type PoiDetailSheetProps = {
   poi: Poi | null;
@@ -64,38 +65,20 @@ const PHOTO_BOX_HEIGHT = 300;
 const PHOTO_AUTO_ADVANCE_MS = 3000;
 
 export function PoiDetailSheet({ poi: poiProp, onClose }: PoiDetailSheetProps) {
-  const pois = useExplorerStore((state) => state.pois);
   const categories = useExplorerStore((state) => state.categories);
   const favorites = useExplorerStore((state) => state.favorites);
   const visitedPoiIds = useExplorerStore((state) => state.visitedPoiIds);
   const toggleFavorite = useExplorerStore((state) => state.toggleFavorite);
   const toggleVisited = useExplorerStore((state) => state.toggleVisited);
   const markPoiViewed = useExplorerStore((state) => state.markPoiViewed);
-  const setSelectedPoiId = useExplorerStore((state) => state.setSelectedPoiId);
   const language = useExplorerStore((state) => state.language);
   const t = useTranslations();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const [activePhotoIndex, setActivePhotoIndex] = useState(0);
-  const [photoBoxWidth, setPhotoBoxWidth] = useState(0);
-  const [isPhotoViewerOpen, setIsPhotoViewerOpen] = useState(false);
-  const photoScrollRef = useRef<ScrollView>(null);
-  const isPhotoDraggingRef = useRef(false);
-  const [isReportOpen, setIsReportOpen] = useState(false);
-  const [reportMessage, setReportMessage] = useState("");
-  const [isSendingReport, setIsSendingReport] = useState(false);
-  const [reportSent, setReportSent] = useState(false);
-  const [reportError, setReportError] = useState(false);
-
   useEffect(() => {
     if (poiProp) markPoiViewed(poiProp.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [poiProp?.id]);
-
-  useEffect(() => {
-    setActivePhotoIndex(0);
-    photoScrollRef.current?.scrollTo({ x: 0, animated: false });
   }, [poiProp?.id]);
 
   const { height: windowHeight } = useWindowDimensions();
@@ -115,11 +98,21 @@ export function PoiDetailSheet({ poi: poiProp, onClose }: PoiDetailSheetProps) {
   // user asks to close — without this the sheet would just vanish mid-swipe.
   const [renderedPoi, setRenderedPoi] = useState<Poi | null>(poiProp);
 
-  // Tracks the chain of POIs visited via goForward/goBack within this sheet
-  // session, so "next" always suggests the nearest place not yet seen and
-  // "previous" can retrace the same path instead of a fixed list order.
-  const [navHistory, setNavHistory] = useState<string[]>(poiProp ? [poiProp.id] : []);
-  const isInternalNavRef = useRef(false);
+  const poi = renderedPoi;
+  const { isInternalNavRef, resetHistory, nextPreviewPoi, previousPreviewPoi, hasNextPlace, hasPreviousPlace, goForward, goBack } =
+    usePoiSheetNavigation(poi);
+  const {
+    activePhotoIndex,
+    setActivePhotoIndex,
+    photoBoxWidth,
+    setPhotoBoxWidth,
+    isPhotoViewerOpen,
+    setIsPhotoViewerOpen,
+    photoScrollRef,
+    isPhotoDraggingRef
+  } = usePhotoPager(poi);
+  const { isReportOpen, setIsReportOpen, reportMessage, setReportMessage, isSendingReport, reportSent, reportError, resetReport, handleSubmitReport } =
+    usePoiReport();
 
   useEffect(() => {
     if (poiProp) {
@@ -128,13 +121,13 @@ export function PoiDetailSheet({ poi: poiProp, onClose }: PoiDetailSheetProps) {
       if (isFreshOpen) {
         translateY.value = sheetHeight;
         translateY.value = withSpring(0, ENTRANCE_SPRING);
-        setNavHistory([poiProp.id]);
+        resetHistory(poiProp.id);
       } else if (isInternalNavRef.current) {
         isInternalNavRef.current = false;
         translateY.value = 0;
       } else {
         translateY.value = 0;
-        setNavHistory([poiProp.id]);
+        resetHistory(poiProp.id);
       }
     } else if (renderedPoi) {
       translateY.value = withTiming(sheetHeight, { duration: EXIT_DURATION }, (finished) => {
@@ -144,71 +137,8 @@ export function PoiDetailSheet({ poi: poiProp, onClose }: PoiDetailSheetProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poiProp?.id]);
 
-  const poi = renderedPoi;
-  const regionPois = useMemo(() => (poi ? pois.filter((p) => p.regionId === poi.regionId) : []), [pois, poi]);
-
-  // Auto-advances the hero photo pager like an Instagram Story — 3s per
-  // photo, looping back to the first — while the sheet is open. Paused
-  // while the user is dragging the pager themselves or has opened the
-  // fullscreen photo viewer (where they page through manually instead).
-  useEffect(() => {
-    const photoCount = poi?.photos.length ?? 0;
-    if (!poi || photoBoxWidth === 0 || photoCount <= 1 || isPhotoViewerOpen) return;
-    const timer = setTimeout(() => {
-      if (isPhotoDraggingRef.current) return;
-      const nextIndex = (activePhotoIndex + 1) % photoCount;
-      photoScrollRef.current?.scrollTo({ x: nextIndex * photoBoxWidth, animated: true });
-      setActivePhotoIndex(nextIndex);
-    }, PHOTO_AUTO_ADVANCE_MS);
-    return () => clearTimeout(timer);
-  }, [poi, photoBoxWidth, activePhotoIndex, isPhotoViewerOpen]);
-
-  // Computed eagerly (not just on release) so a peek preview of the
-  // destination place can be shown while the user is still dragging.
-  const nextPreviewPoi = useMemo(() => {
-    if (!poi) return null;
-    const visited = new Set(navHistory);
-    let nearest: Poi | null = null;
-    let nearestDistance = Infinity;
-    for (const candidate of regionPois) {
-      if (visited.has(candidate.id)) continue;
-      const distance = haversineDistanceMeters(poi.coordinates, candidate.coordinates);
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearest = candidate;
-      }
-    }
-    return nearest;
-  }, [poi, regionPois, navHistory]);
-
-  const previousPreviewPoi = useMemo(() => {
-    if (navHistory.length < 2) return null;
-    const previousId = navHistory[navHistory.length - 2];
-    return pois.find((p) => p.id === previousId) ?? null;
-  }, [navHistory, pois]);
-
-  const hasNextPlace = nextPreviewPoi !== null;
-  const hasPreviousPlace = previousPreviewPoi !== null;
-
   function closeSheet() {
     handleClose();
-  }
-
-  // Suggests the nearest not-yet-seen place in the region, rather than the
-  // next item in list order — swiping the card feels like walking toward
-  // whatever is actually closest.
-  function goForward() {
-    if (!nextPreviewPoi) return;
-    isInternalNavRef.current = true;
-    setNavHistory((prev) => [...prev, nextPreviewPoi.id]);
-    setSelectedPoiId(nextPreviewPoi.id);
-  }
-
-  function goBack() {
-    if (!previousPreviewPoi) return;
-    isInternalNavRef.current = true;
-    setNavHistory((prev) => prev.slice(0, -1));
-    setSelectedPoiId(previousPreviewPoi.id);
   }
 
   const cardX = useSharedValue(0);
@@ -307,25 +237,8 @@ export function PoiDetailSheet({ poi: poiProp, onClose }: PoiDetailSheetProps) {
   }
 
   function handleClose() {
-    setIsReportOpen(false);
-    setReportMessage("");
-    setReportSent(false);
-    setReportError(false);
+    resetReport();
     onClose();
-  }
-
-  async function handleSubmitReport() {
-    if (!reportMessage.trim() || isSendingReport) return;
-    setIsSendingReport(true);
-    setReportError(false);
-    try {
-      await submitPoiReport(poi!.id, reportMessage.trim());
-      setReportSent(true);
-    } catch {
-      setReportError(true);
-    } finally {
-      setIsSendingReport(false);
-    }
   }
 
   return (
@@ -617,7 +530,7 @@ export function PoiDetailSheet({ poi: poiProp, onClose }: PoiDetailSheetProps) {
                   </AnimatedPressable>
                   <AnimatedPressable
                     style={styles.reportSubmitButton}
-                    onPress={handleSubmitReport}
+                    onPress={() => handleSubmitReport(poi.id)}
                     disabled={isSendingReport || !reportMessage.trim()}
                   >
                     {isSendingReport ? (
