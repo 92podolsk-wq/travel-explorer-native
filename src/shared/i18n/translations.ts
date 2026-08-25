@@ -12,9 +12,19 @@ type TranslationDictionary = {
     checklistCardTitle: string;
     checklistSetDate: string;
     checklistDateSet: string;
+    checklistTripNamePlaceholder: string;
+    checklistDaysUntilTrip: string;
     checklistPackingTitle: string;
+    checklistDocumentsTitle: string;
     checklistShoppingTitle: string;
+    checklistDepartureTitle: string;
     checklistAddPlaceholder: string;
+    checklistDeleteItem: string;
+    checklistFilterAll: string;
+    checklistFilterIncomplete: string;
+    checklistFilterComplete: string;
+    checklistAllDoneTitle: string;
+    checklistAllDoneBody: string;
     save: string;
     mustVisit: string;
     photo: string;
@@ -303,9 +313,19 @@ export const translations: Record<Language, TranslationDictionary> = {
       checklistCardTitle: "Чек-лист поездки",
       checklistSetDate: "Указать дату поездки",
       checklistDateSet: "Поездка {date}",
-      checklistPackingTitle: "Сборы в поездку",
-      checklistShoppingTitle: "Что купить / привезти",
+      checklistTripNamePlaceholder: "Название поездки",
+      checklistDaysUntilTrip: "через {n} дн.",
+      checklistPackingTitle: "Взять с собой",
+      checklistDocumentsTitle: "Документы",
+      checklistShoppingTitle: "Купить",
+      checklistDepartureTitle: "Перед выездом",
       checklistAddPlaceholder: "Добавить пункт",
+      checklistDeleteItem: "Удалить",
+      checklistFilterAll: "Все",
+      checklistFilterIncomplete: "Не выполнено",
+      checklistFilterComplete: "Выполнено",
+      checklistAllDoneTitle: "Всё готово!",
+      checklistAllDoneBody: "Можно отправляться в поездку.",
       save: "Сохранить",
       mustVisit: "Обязательно",
       photo: "Фото",
@@ -606,9 +626,19 @@ export const translations: Record<Language, TranslationDictionary> = {
       checklistCardTitle: "Trip checklist",
       checklistSetDate: "Set trip date",
       checklistDateSet: "Trip on {date}",
-      checklistPackingTitle: "Packing list",
-      checklistShoppingTitle: "To buy / bring back",
+      checklistTripNamePlaceholder: "Trip name",
+      checklistDaysUntilTrip: "{n} days to go",
+      checklistPackingTitle: "To pack",
+      checklistDocumentsTitle: "Documents",
+      checklistShoppingTitle: "To buy",
+      checklistDepartureTitle: "Before you leave",
       checklistAddPlaceholder: "Add an item",
+      checklistDeleteItem: "Delete",
+      checklistFilterAll: "All",
+      checklistFilterIncomplete: "To do",
+      checklistFilterComplete: "Done",
+      checklistAllDoneTitle: "All set!",
+      checklistAllDoneBody: "You're ready for the trip.",
       save: "Save",
       mustVisit: "Must Visit",
       photo: "Photo",

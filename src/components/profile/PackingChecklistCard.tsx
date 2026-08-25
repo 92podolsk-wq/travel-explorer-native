@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { Swipeable } from "react-native-gesture-handler";
 import { Text } from "@/shared/ui/AppText";
 import { TextInput } from "@/shared/ui/AppTextInput";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -30,70 +31,128 @@ function makeId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+type ChecklistFilter = "all" | "incomplete" | "complete";
+
+function filterItems(items: ChecklistItem[], filter: ChecklistFilter): ChecklistItem[] {
+  if (filter === "incomplete") return items.filter((item) => !item.checked);
+  if (filter === "complete") return items.filter((item) => item.checked);
+  return items;
+}
+
 type Styles = ReturnType<typeof createStyles>;
 
 function ChecklistSection({
+  emoji,
   title,
   items,
+  filter,
+  isOpen,
+  onToggleOpen,
   colors,
   styles,
   addPlaceholder,
+  deleteLabel,
   onToggle,
   onRemove,
   onAdd
 }: {
+  emoji: string;
   title: string;
   items: ChecklistItem[];
+  filter: ChecklistFilter;
+  isOpen: boolean;
+  onToggleOpen: () => void;
   colors: ThemeColors;
   styles: Styles;
   addPlaceholder: string;
+  deleteLabel: string;
   onToggle: (id: string) => void;
   onRemove: (id: string) => void;
   onAdd: (label: string) => void;
 }) {
   const [draft, setDraft] = useState("");
+  const [isAdding, setIsAdding] = useState(false);
+  const visibleItems = filterItems(items, filter);
+  const doneCount = items.filter((item) => item.checked).length;
 
   function submit() {
     const trimmed = draft.trim();
     if (!trimmed) return;
     onAdd(trimmed);
     setDraft("");
+    setIsAdding(false);
   }
 
   return (
-    <View>
-      <Text style={styles.subTitle}>{title}</Text>
-      {items.map((item) => (
-        <View key={item.id} style={styles.itemRow}>
-          <TouchableOpacity style={styles.itemCheckRow} onPress={() => onToggle(item.id)}>
-            <Ionicons
-              name={item.checked ? "checkbox" : "square-outline"}
-              size={20}
-              color={item.checked ? colors.primary : colors.textTertiary}
-            />
-            <Text style={[styles.itemLabel, item.checked && styles.itemLabelChecked]} numberOfLines={1}>
-              {item.label}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => onRemove(item.id)} hitSlop={8}>
-            <Ionicons name="close" size={16} color={colors.textTertiary} />
-          </TouchableOpacity>
+    <View style={styles.section}>
+      <TouchableOpacity style={styles.sectionHeader} onPress={onToggleOpen} activeOpacity={0.7}>
+        <View style={styles.sectionHeaderLeft}>
+          <Text style={styles.sectionEmoji}>{emoji}</Text>
+          <Text style={styles.subTitle}>{title}</Text>
         </View>
-      ))}
-      <View style={styles.addRow}>
-        <TextInput
-          style={styles.addInput}
-          placeholder={addPlaceholder}
-          placeholderTextColor={colors.placeholder}
-          value={draft}
-          onChangeText={setDraft}
-          onSubmitEditing={submit}
-          returnKeyType="done"
-        />
-        <TouchableOpacity style={styles.addButton} onPress={submit}>
-          <Ionicons name="add" size={18} color={colors.textInverse} />
-        </TouchableOpacity>
-      </View>
+        <View style={styles.sectionHeaderRight}>
+          <Text style={styles.sectionCount}>
+            {doneCount}/{items.length}
+          </Text>
+          <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={16} color={colors.textTertiary} />
+        </View>
+      </TouchableOpacity>
+
+      {isOpen ? (
+        <>
+          {visibleItems.map((item) => (
+            <Swipeable
+              key={item.id}
+              renderRightActions={() => (
+                <TouchableOpacity style={styles.deleteAction} onPress={() => onRemove(item.id)}>
+                  <Ionicons name="trash-outline" size={16} color="#fff" />
+                  <Text style={styles.deleteActionLabel}>{deleteLabel}</Text>
+                </TouchableOpacity>
+              )}
+              overshootRight={false}
+            >
+              <View style={styles.itemRow}>
+                <TouchableOpacity style={styles.itemCheckRow} onPress={() => onToggle(item.id)}>
+                  <Ionicons
+                    name={item.checked ? "checkbox" : "square-outline"}
+                    size={20}
+                    color={item.checked ? colors.primary : colors.textTertiary}
+                  />
+                  <Text style={[styles.itemLabel, item.checked && styles.itemLabelChecked]} numberOfLines={1}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </Swipeable>
+          ))}
+
+          {isAdding ? (
+            <View style={styles.addRow}>
+              <TextInput
+                autoFocus
+                style={styles.addInput}
+                placeholder={addPlaceholder}
+                placeholderTextColor={colors.placeholder}
+                value={draft}
+                onChangeText={setDraft}
+                onSubmitEditing={submit}
+                onBlur={() => {
+                  if (!draft.trim()) setIsAdding(false);
+                }}
+                returnKeyType="done"
+              />
+              <TouchableOpacity style={styles.addButton} onPress={submit}>
+                <Ionicons name="add" size={18} color={colors.textInverse} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.addLink} onPress={() => setIsAdding(true)}>
+              <Ionicons name="add" size={14} color={colors.primary} />
+              <Text style={styles.addLinkLabel}>{addPlaceholder}</Text>
+            </TouchableOpacity>
+          )}
+        </>
+      ) : null}
     </View>
   );
 }
@@ -104,11 +163,17 @@ export function PackingChecklistCard() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const currentUser = useExplorerStore((state) => state.currentUser);
   const [state, setState] = useState<PackingChecklistState | null>(null);
-  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [openDatePicker, setOpenDatePicker] = useState<"start" | "end" | null>(null);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [shareTargetIds, setShareTargetIds] = useState<Set<string>>(new Set());
   const [pendingShareId, setPendingShareId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<ChecklistFilter>("all");
+  const [openPacking, setOpenPacking] = useState(true);
+  const [openDocuments, setOpenDocuments] = useState(false);
+  const [openShopping, setOpenShopping] = useState(false);
+  const [openDeparture, setOpenDeparture] = useState(false);
+  const [tripNameDraft, setTripNameDraft] = useState("");
 
   useEffect(() => {
     if (currentUser) {
@@ -122,7 +187,18 @@ export function PackingChecklistCard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id]);
 
-  async function applyPatch(patch: Partial<Pick<PackingChecklistState, "tripDate" | "packingItems" | "shoppingItems">>) {
+  useEffect(() => {
+    setTripNameDraft(state?.tripName ?? "");
+  }, [state?.tripName]);
+
+  async function applyPatch(
+    patch: Partial<
+      Pick<
+        PackingChecklistState,
+        "tripName" | "tripStartDate" | "tripEndDate" | "packingItems" | "documentItems" | "shoppingItems" | "departureItems"
+      >
+    >
+  ) {
     if (!state) return;
     if (currentUser) {
       const merged = { ...state, ...patch };
@@ -164,18 +240,49 @@ export function PackingChecklistCard() {
 
   if (!state) return null;
 
-  function handleDateChange(event: { type: string }, selectedDate?: Date) {
-    setIsDatePickerOpen(false);
+  function handleStartDateChange(event: { type: string }, selectedDate?: Date) {
+    setOpenDatePicker(null);
     if (event.type !== "set" || !selectedDate) return;
-    applyPatch({ tripDate: selectedDate.toISOString() });
+    applyPatch({ tripStartDate: selectedDate.toISOString() });
   }
 
-  const dateLabel = state.tripDate
-    ? t.app.checklistDateSet.replace(
-        "{date}",
-        new Date(state.tripDate).toLocaleDateString(undefined, { day: "numeric", month: "long" })
-      )
-    : t.app.checklistSetDate;
+  function handleEndDateChange(event: { type: string }, selectedDate?: Date) {
+    setOpenDatePicker(null);
+    if (event.type !== "set" || !selectedDate) return;
+    applyPatch({ tripEndDate: selectedDate.toISOString() });
+  }
+
+  function commitTripName() {
+    const trimmed = tripNameDraft.trim();
+    if (trimmed !== (state!.tripName ?? "")) {
+      applyPatch({ tripName: trimmed || null });
+    }
+  }
+
+  function formatDate(iso: string): string {
+    return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "long" });
+  }
+
+  const startLabel = state.tripStartDate ? formatDate(state.tripStartDate) : t.app.checklistSetDate;
+  const endLabel = state.tripEndDate ? formatDate(state.tripEndDate) : t.app.checklistSetDate;
+
+  const daysUntilTrip = (() => {
+    if (!state.tripStartDate) return null;
+    const startOfToday = new Date().setHours(0, 0, 0, 0);
+    const startOfTrip = new Date(state.tripStartDate).setHours(0, 0, 0, 0);
+    const days = Math.round((startOfTrip - startOfToday) / 86_400_000);
+    return days >= 0 ? days : null;
+  })();
+
+  const totalCount =
+    state.packingItems.length + state.documentItems.length + state.shoppingItems.length + state.departureItems.length;
+  const doneCount =
+    state.packingItems.filter((item) => item.checked).length +
+    state.documentItems.filter((item) => item.checked).length +
+    state.shoppingItems.filter((item) => item.checked).length +
+    state.departureItems.filter((item) => item.checked).length;
+  const progressPercent = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
+  const isAllDone = totalCount > 0 && doneCount === totalCount;
 
   return (
     <View style={styles.card}>
@@ -220,25 +327,108 @@ export function PackingChecklistCard() {
         </View>
       ) : null}
 
-      <TouchableOpacity style={styles.dateRow} onPress={() => setIsDatePickerOpen(true)}>
-        <Ionicons name="calendar-outline" size={14} color={colors.primary} />
-        <Text style={styles.dateLabel}>{dateLabel}</Text>
-      </TouchableOpacity>
-      {isDatePickerOpen ? (
+      <View style={styles.tripCard}>
+        <TextInput
+          style={styles.tripNameInput}
+          placeholder={t.app.checklistTripNamePlaceholder}
+          placeholderTextColor={colors.placeholder}
+          value={tripNameDraft}
+          onChangeText={setTripNameDraft}
+          onBlur={commitTripName}
+          onSubmitEditing={commitTripName}
+          returnKeyType="done"
+        />
+
+        <View style={styles.dateRowGroup}>
+          <TouchableOpacity style={styles.dateRow} onPress={() => setOpenDatePicker("start")}>
+            <Ionicons name="calendar-outline" size={13} color={colors.primary} />
+            <Text style={styles.dateLabel} numberOfLines={1}>
+              {startLabel}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.dateRow} onPress={() => setOpenDatePicker("end")}>
+            <Ionicons name="calendar-outline" size={13} color={colors.primary} />
+            <Text style={styles.dateLabel} numberOfLines={1}>
+              {endLabel}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {daysUntilTrip != null ? (
+          <Text style={styles.daysUntilLabel}>{t.app.checklistDaysUntilTrip.replace("{n}", String(daysUntilTrip))}</Text>
+        ) : null}
+
+        {totalCount > 0 ? (
+          <View style={styles.progressBlock}>
+            <View style={styles.progressRow}>
+              <Text style={styles.progressLabel}>
+                {doneCount} / {totalCount}
+              </Text>
+              <Text style={styles.progressLabel}>{progressPercent}%</Text>
+            </View>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+            </View>
+          </View>
+        ) : null}
+      </View>
+
+      {openDatePicker === "start" ? (
         <DateTimePicker
-          value={state.tripDate ? new Date(state.tripDate) : new Date()}
+          value={state.tripStartDate ? new Date(state.tripStartDate) : new Date()}
           mode="date"
-          minimumDate={new Date()}
-          onChange={handleDateChange}
+          onChange={handleStartDateChange}
+        />
+      ) : null}
+      {openDatePicker === "end" ? (
+        <DateTimePicker
+          value={state.tripEndDate ? new Date(state.tripEndDate) : new Date()}
+          mode="date"
+          onChange={handleEndDateChange}
         />
       ) : null}
 
+      {isAllDone ? (
+        <View style={styles.allDoneBanner}>
+          <Ionicons name="sparkles" size={16} color={colors.primary} />
+          <Text style={styles.allDoneText}>
+            <Text style={styles.allDoneTitle}>{t.app.checklistAllDoneTitle} </Text>
+            {t.app.checklistAllDoneBody}
+          </Text>
+        </View>
+      ) : null}
+
+      <View style={styles.filterRow}>
+        {(
+          [
+            { id: "all" as const, label: t.app.checklistFilterAll, count: totalCount },
+            { id: "incomplete" as const, label: t.app.checklistFilterIncomplete, count: totalCount - doneCount },
+            { id: "complete" as const, label: t.app.checklistFilterComplete, count: doneCount }
+          ] as const
+        ).map((option) => (
+          <TouchableOpacity
+            key={option.id}
+            style={[styles.filterChip, filter === option.id && styles.filterChipActive]}
+            onPress={() => setFilter(option.id)}
+          >
+            <Text style={[styles.filterChipLabel, filter === option.id && styles.filterChipLabelActive]} numberOfLines={1}>
+              {option.label} {option.count}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       <ChecklistSection
+        emoji="🧳"
         title={t.app.checklistPackingTitle}
         items={state.packingItems}
+        filter={filter}
+        isOpen={openPacking}
+        onToggleOpen={() => setOpenPacking((value) => !value)}
         colors={colors}
         styles={styles}
         addPlaceholder={t.app.checklistAddPlaceholder}
+        deleteLabel={t.app.checklistDeleteItem}
         onToggle={(id) =>
           applyPatch({
             packingItems: state.packingItems.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item))
@@ -248,14 +438,37 @@ export function PackingChecklistCard() {
         onAdd={(label) => applyPatch({ packingItems: [...state.packingItems, { id: makeId(), label, checked: false }] })}
       />
 
-      <View style={styles.sectionDivider} />
-
       <ChecklistSection
-        title={t.app.checklistShoppingTitle}
-        items={state.shoppingItems}
+        emoji="📄"
+        title={t.app.checklistDocumentsTitle}
+        items={state.documentItems}
+        filter={filter}
+        isOpen={openDocuments}
+        onToggleOpen={() => setOpenDocuments((value) => !value)}
         colors={colors}
         styles={styles}
         addPlaceholder={t.app.checklistAddPlaceholder}
+        deleteLabel={t.app.checklistDeleteItem}
+        onToggle={(id) =>
+          applyPatch({
+            documentItems: state.documentItems.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item))
+          })
+        }
+        onRemove={(id) => applyPatch({ documentItems: state.documentItems.filter((item) => item.id !== id) })}
+        onAdd={(label) => applyPatch({ documentItems: [...state.documentItems, { id: makeId(), label, checked: false }] })}
+      />
+
+      <ChecklistSection
+        emoji="🛍"
+        title={t.app.checklistShoppingTitle}
+        items={state.shoppingItems}
+        filter={filter}
+        isOpen={openShopping}
+        onToggleOpen={() => setOpenShopping((value) => !value)}
+        colors={colors}
+        styles={styles}
+        addPlaceholder={t.app.checklistAddPlaceholder}
+        deleteLabel={t.app.checklistDeleteItem}
         onToggle={(id) =>
           applyPatch({
             shoppingItems: state.shoppingItems.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item))
@@ -263,6 +476,26 @@ export function PackingChecklistCard() {
         }
         onRemove={(id) => applyPatch({ shoppingItems: state.shoppingItems.filter((item) => item.id !== id) })}
         onAdd={(label) => applyPatch({ shoppingItems: [...state.shoppingItems, { id: makeId(), label, checked: false }] })}
+      />
+
+      <ChecklistSection
+        emoji="🏠"
+        title={t.app.checklistDepartureTitle}
+        items={state.departureItems}
+        filter={filter}
+        isOpen={openDeparture}
+        onToggleOpen={() => setOpenDeparture((value) => !value)}
+        colors={colors}
+        styles={styles}
+        addPlaceholder={t.app.checklistAddPlaceholder}
+        deleteLabel={t.app.checklistDeleteItem}
+        onToggle={(id) =>
+          applyPatch({
+            departureItems: state.departureItems.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item))
+          })
+        }
+        onRemove={(id) => applyPatch({ departureItems: state.departureItems.filter((item) => item.id !== id) })}
+        onAdd={(label) => applyPatch({ departureItems: [...state.departureItems, { id: makeId(), label, checked: false }] })}
       />
     </View>
   );
@@ -295,30 +528,77 @@ function createStyles(colors: ThemeColors) {
     primaryButtonLabel: { fontSize: 11, fontWeight: "700", color: colors.primary },
     secondaryButton: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: colors.border },
     secondaryButtonLabel: { fontSize: 11, fontWeight: "700", color: colors.textSecondary },
+    tripCard: { backgroundColor: colors.background, borderRadius: 10, padding: 10, marginBottom: 10, gap: 8 },
+    tripNameInput: { fontSize: 14, fontWeight: "800", color: colors.textPrimary, padding: 0 },
+    dateRowGroup: { flexDirection: "row", gap: 8 },
     dateRow: {
+      flex: 1,
       flexDirection: "row",
       alignItems: "center",
       gap: 6,
-      alignSelf: "flex-start",
       backgroundColor: colors.primarySoft,
       borderRadius: 8,
       paddingHorizontal: 10,
-      paddingVertical: 6,
-      marginBottom: 14
+      paddingVertical: 6
     },
-    dateLabel: { fontSize: 12, fontWeight: "700", color: colors.primary },
-    subTitle: { fontSize: 13, fontWeight: "700", color: colors.textPrimary, marginBottom: 8 },
+    dateLabel: { fontSize: 12, fontWeight: "700", color: colors.primary, flexShrink: 1 },
+    daysUntilLabel: { fontSize: 11, color: colors.textTertiary },
+    progressBlock: { gap: 4 },
+    progressRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+    progressLabel: { fontSize: 11, fontWeight: "600", color: colors.textTertiary },
+    progressTrack: { height: 6, borderRadius: 3, backgroundColor: colors.divider, overflow: "hidden" },
+    progressFill: { height: "100%", borderRadius: 3, backgroundColor: colors.primary },
+    allDoneBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: colors.primarySoft,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      marginBottom: 10
+    },
+    allDoneTitle: { fontWeight: "800", color: colors.primary },
+    allDoneText: { fontSize: 12, color: colors.primary, flexShrink: 1 },
+    filterRow: { flexDirection: "row", gap: 6, marginBottom: 10 },
+    filterChip: {
+      flex: 1,
+      borderRadius: 8,
+      paddingVertical: 6,
+      alignItems: "center",
+      backgroundColor: colors.background
+    },
+    filterChipActive: { backgroundColor: colors.primary },
+    filterChipLabel: { fontSize: 10, fontWeight: "700", color: colors.textTertiary },
+    filterChipLabelActive: { color: colors.textInverse },
+    section: { marginBottom: 6 },
+    sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8 },
+    sectionHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
+    sectionEmoji: { fontSize: 14 },
+    sectionHeaderRight: { flexDirection: "row", alignItems: "center", gap: 6 },
+    sectionCount: { fontSize: 11, fontWeight: "600", color: colors.textTertiary },
+    subTitle: { fontSize: 13, fontWeight: "700", color: colors.textPrimary },
     itemRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
       paddingVertical: 7,
       borderBottomWidth: 1,
-      borderBottomColor: colors.divider
+      borderBottomColor: colors.divider,
+      backgroundColor: colors.surface
     },
     itemCheckRow: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
     itemLabel: { fontSize: 14, color: colors.textPrimary, flexShrink: 1 },
     itemLabelChecked: { color: colors.textTertiary, textDecorationLine: "line-through" },
+    deleteAction: {
+      width: 64,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 2,
+      backgroundColor: colors.danger,
+      marginBottom: 1
+    },
+    deleteActionLabel: { fontSize: 9, fontWeight: "700", color: "#fff" },
     addRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
     addInput: {
       flex: 1,
@@ -337,6 +617,7 @@ function createStyles(colors: ThemeColors) {
       justifyContent: "center",
       backgroundColor: colors.primary
     },
-    sectionDivider: { height: 1, backgroundColor: colors.divider, marginVertical: 16 }
+    addLink: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 8 },
+    addLinkLabel: { fontSize: 12, fontWeight: "600", color: colors.primary }
   });
 }
