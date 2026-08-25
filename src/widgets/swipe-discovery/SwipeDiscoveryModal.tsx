@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { Modal, StyleSheet, TouchableOpacity, View } from "react-native";
 import { Text } from "@/shared/ui/AppText";
 import { Image } from "expo-image";
@@ -20,6 +20,7 @@ import { hapticSelection, hapticSuccess, hapticSwipe } from "@/shared/haptics";
 import { useTheme } from "@/shared/theme/useTheme";
 import type { ThemeColors } from "@/shared/theme/colors";
 import { resolveOfflinePhotoUri } from "@/shared/map/offline-maps";
+import { useSwipeDeck } from "./useSwipeDeck";
 
 type NeighboringSwipeRegion = { id: string; name: string; count: number };
 
@@ -166,42 +167,11 @@ export function SwipeDiscoveryModal({
   const t = useTranslations();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const [deck] = useState(() => pois);
-  const [index, setIndex] = useState(0);
-
-  const current = deck[index];
-  const next = deck[index + 1];
-  const next2 = deck[index + 2];
-
-  const backCards = useMemo(
-    () => [
-      { poi: next2, scale: 0.94, translateY: 14, opacity: 0.75 },
-      { poi: next, scale: 0.97, translateY: 7, opacity: 0.9 }
-    ],
-    [next, next2]
+  const { deck, index, current, backCards, handleLike, handleSkip, handleLikeButton, handleSkipButton } = useSwipeDeck(
+    pois,
+    onLike,
+    onSkip
   );
-
-  function handleLike() {
-    if (!current) return;
-    onLike(current.id);
-    setIndex((i) => i + 1);
-  }
-
-  function handleSkip() {
-    if (!current) return;
-    onSkip(current.id);
-    setIndex((i) => i + 1);
-  }
-
-  function handleLikeButton() {
-    hapticSuccess();
-    handleLike();
-  }
-
-  function handleSkipButton() {
-    hapticSwipe();
-    handleSkip();
-  }
 
   const nameFor = (poi: Poi) => poi.nameByLanguage?.[language] ?? poi.name;
   const descriptionFor = (poi: Poi) => poi.descriptionByLanguage?.[language] ?? poi.description;
