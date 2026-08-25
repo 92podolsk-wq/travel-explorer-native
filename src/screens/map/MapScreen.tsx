@@ -19,15 +19,13 @@ import type { PressEventWithFeatures } from "@maplibre/maplibre-react-native";
 import type { NativeSyntheticEvent } from "react-native";
 import type { Region } from "@/entities/region/model/types";
 import { fuzzyMatch } from "@/shared/lib/fuzzy-match";
-import { shuffle } from "@/shared/lib/shuffle";
-import { haversineDistanceMeters } from "@/shared/lib/geo";
 import { useTranslations } from "@/shared/i18n/useTranslations";
 import { resolveMapStyleUrl } from "@/shared/map/map-styles";
 import { useExplorerStore } from "@/shared/model/explorer-store";
 import { useOfflineRegionActions } from "./hooks/useOfflineRegionActions";
 import { useMapClustering } from "./hooks/useMapClustering";
-import { createCustomMarker, deleteCustomMarker, listCustomMarkers } from "@/shared/api/custom-markers";
-import { addItineraryStop, removeItineraryStop } from "@/shared/api/itineraries";
+import { useCustomMarkers } from "./hooks/useCustomMarkers";
+import { useSwipeDiscoveryCandidates } from "./hooks/useSwipeDiscoveryCandidates";
 import { CategoryFilterSheet } from "@/components/CategoryFilterSheet";
 import { RegionSwitcherModal } from "@/components/RegionSwitcherModal";
 import { PoiDetailSheet } from "@/components/PoiDetailSheet";
@@ -78,19 +76,11 @@ export function MapScreen() {
   const selectedPoiId = useExplorerStore((state) => state.selectedPoiId);
   const setSelectedPoiId = useExplorerStore((state) => state.setSelectedPoiId);
   const language = useExplorerStore((state) => state.language);
-  const authStatus = useExplorerStore((state) => state.authStatus);
-  const openAuthModal = useExplorerStore((state) => state.openAuthModal);
   const customMarkers = useExplorerStore((state) => state.customMarkers);
   const customMarkerLimit = useExplorerStore((state) => state.customMarkerLimit);
-  const setCustomMarkers = useExplorerStore((state) => state.setCustomMarkers);
-  const addCustomMarkerToState = useExplorerStore((state) => state.addCustomMarkerToState);
-  const removeCustomMarkerFromState = useExplorerStore((state) => state.removeCustomMarkerFromState);
-  const itinerary = useExplorerStore((state) => state.itinerary);
-  const setItinerary = useExplorerStore((state) => state.setItinerary);
   const countries = useExplorerStore((state) => state.countries);
   const areas = useExplorerStore((state) => state.areas);
   const favorites = useExplorerStore((state) => state.favorites);
-  const viewedPoiIds = useExplorerStore((state) => state.viewedPoiIds);
   const visitedPoiIds = useExplorerStore((state) => state.visitedPoiIds);
   const toggleFavorite = useExplorerStore((state) => state.toggleFavorite);
   const markPoiViewed = useExplorerStore((state) => state.markPoiViewed);
@@ -102,7 +92,6 @@ export function MapScreen() {
 
   const [isRegionPickerOpen, setIsRegionPickerOpen] = useState(false);
   const [isCategorySheetOpen, setIsCategorySheetOpen] = useState(false);
-  const [pendingMarkerCoords, setPendingMarkerCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [previewPoiId, setPreviewPoiId] = useState<string | null>(null);
   const [markerSpriteUris, setMarkerSpriteUris] = useState<Record<string, string>>({});
 
@@ -111,80 +100,8 @@ export function MapScreen() {
   const markerPressedAtRef = useRef(0);
   const previewCenterRef = useRef<[number, number] | null>(null);
 
-  useEffect(() => {
-    if (authStatus !== "authenticated") return;
-    listCustomMarkers()
-      .then(({ markers, limit }) => setCustomMarkers(markers, limit))
-      .catch(() => {});
-  }, [authStatus, setCustomMarkers]);
-
-  function handleMapLongPress(lat: number, lng: number) {
-    if (authStatus !== "authenticated") {
-      openAuthModal();
-      return;
-    }
-    setPendingMarkerCoords({ lat, lng });
-  }
-
-  async function handleSaveMarker(color: string, label: string): Promise<{ ok: true } | { ok: false; error: string }> {
-    if (!pendingMarkerCoords) return { ok: false, error: t.app.markerSaveError };
-    try {
-      const marker = await createCustomMarker({ lat: pendingMarkerCoords.lat, lng: pendingMarkerCoords.lng, color, label });
-      addCustomMarkerToState(marker);
-      setPendingMarkerCoords(null);
-      return { ok: true };
-    } catch {
-      return { ok: false, error: t.app.markerSaveError };
-    }
-  }
-
-  async function handleMarkerPress(markerId: string) {
-    const marker = customMarkers.find((m) => m.id === markerId);
-    if (!marker) return;
-    const stop = itinerary?.stops.find((s) => s.point.kind === "marker" && s.point.marker.id === markerId);
-    const options: { text: string; style?: "destructive" | "cancel"; onPress?: () => void }[] = [];
-
-    if (itinerary) {
-      if (stop) {
-        options.push({
-          text: t.app.removeMarkerFromItinerary,
-          onPress: async () => {
-            const updated = await removeItineraryStop(itinerary.id, stop.id);
-            setItinerary(updated);
-          }
-        });
-      } else {
-        options.push({
-          text: t.app.addMarkerToItinerary,
-          onPress: async () => {
-            const updated = await addItineraryStop(itinerary.id, { customMarkerId: markerId });
-            setItinerary(updated);
-          }
-        });
-      }
-    }
-
-    options.push({
-      text: t.app.deleteMarker,
-      style: "destructive",
-      onPress: () => {
-        Alert.alert(t.app.deleteMarker, t.app.deleteMarkerConfirm, [
-          { text: t.auth.cancel, style: "cancel" },
-          {
-            text: t.auth.delete,
-            style: "destructive",
-            onPress: async () => {
-              removeCustomMarkerFromState(markerId);
-              await deleteCustomMarker(markerId).catch(() => {});
-            }
-          }
-        ]);
-      }
-    });
-    options.push({ text: t.auth.cancel, style: "cancel" });
-
-    Alert.alert(marker.label || t.app.newMarkerTitle, undefined, options);
-  }
+  const { pendingMarkerCoords, setPendingMarkerCoords, handleMapLongPress, handleSaveMarker, handleMarkerPress } =
+    useCustomMarkers();
 
   const selectedPoi = useMemo(() => pois.find((p) => p.id === selectedPoiId) ?? null, [pois, selectedPoiId]);
 
@@ -281,33 +198,7 @@ export function MapScreen() {
     handleMarkerPress(markerId);
   }
 
-  const swipeCandidates = useMemo(() => {
-    const regionPois = pois.filter((poi) => activeRegionIds.includes(poi.regionId));
-    const unswiped = regionPois.filter(
-      (poi) => !favorites.includes(poi.id) && !viewedPoiIds.includes(poi.id) && selectedCategories.includes(poi.category)
-    );
-    return shuffle(unswiped);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pois, activeRegionIds, selectedCategories, isSwipeOpen]);
-
-  const neighboringSwipeRegions = useMemo(() => {
-    if (!primaryRegion) return [];
-    const activeCountryId = areas.find((area) => area.id === primaryRegion.areaId)?.countryId;
-    if (!activeCountryId) return [];
-    return regions
-      .filter((region) => region.status === "published" && !activeRegionIds.includes(region.id))
-      .filter((region) => areas.find((area) => area.id === region.areaId)?.countryId === activeCountryId)
-      .map((region) => ({
-        id: region.id,
-        name: region.nameByLanguage[language] ?? region.name,
-        distance: haversineDistanceMeters(primaryRegion.center, region.center),
-        count: pois.filter((poi) => poi.regionId === region.id && !favorites.includes(poi.id) && !viewedPoiIds.includes(poi.id))
-          .length
-      }))
-      .filter((region) => region.count > 0)
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, 5);
-  }, [primaryRegion, activeRegionIds, areas, regions, pois, favorites, viewedPoiIds, language]);
+  const { swipeCandidates, neighboringSwipeRegions } = useSwipeDiscoveryCandidates(primaryRegion);
 
   const mapStyle = resolveMapStyleUrl(siteSettings?.mapStyleId ?? "openfreemap-bright");
   const position = useCurrentPosition();
