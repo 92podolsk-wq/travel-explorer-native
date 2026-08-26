@@ -2,7 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { Alert, Linking, ScrollView, StyleSheet, Switch, TouchableOpacity, View } from "react-native";
+import { Alert, Linking, StyleSheet, Switch, TouchableOpacity, View } from "react-native";
+import { NestableScrollContainer } from "react-native-draggable-flatlist";
 import { Text } from "@/shared/ui/AppText";
 import { TextInput } from "@/shared/ui/AppTextInput";
 import { Image } from "expo-image";
@@ -141,7 +142,7 @@ export function ProfileScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <NestableScrollContainer style={styles.container} contentContainerStyle={styles.content}>
       <LinearGradient
         colors={[colors.heroGradientStart, colors.heroGradientEnd]}
         start={{ x: 0, y: 0 }}
@@ -457,7 +458,7 @@ export function ProfileScreen() {
       </AnimatedCenterModal>
 
       <SharedTripModal itineraryId={openSharedTripId} onClose={() => setOpenSharedTripId(null)} />
-    </ScrollView>
+    </NestableScrollContainer>
   );
 }
 

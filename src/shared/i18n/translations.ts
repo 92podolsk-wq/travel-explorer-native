@@ -21,8 +21,6 @@ type TranslationDictionary = {
     checklistAddPlaceholder: string;
     checklistDeleteItem: string;
     checklistEditItem: string;
-    checklistMoveUp: string;
-    checklistMoveDown: string;
     checklistAddCategory: string;
     checklistCategoryNamePlaceholder: string;
     checklistDeleteCategoryConfirm: string;
@@ -328,8 +326,6 @@ export const translations: Record<Language, TranslationDictionary> = {
       checklistAddPlaceholder: "Добавить пункт",
       checklistDeleteItem: "Удалить",
       checklistEditItem: "Редактировать",
-      checklistMoveUp: "Переместить вверх",
-      checklistMoveDown: "Переместить вниз",
       checklistAddCategory: "Добавить категорию",
       checklistCategoryNamePlaceholder: "Название категории",
       checklistDeleteCategoryConfirm: "Удалить категорию «{name}»? Все пункты в ней будут удалены.",
@@ -647,8 +643,6 @@ export const translations: Record<Language, TranslationDictionary> = {
       checklistAddPlaceholder: "Add an item",
       checklistDeleteItem: "Delete",
       checklistEditItem: "Edit",
-      checklistMoveUp: "Move up",
-      checklistMoveDown: "Move down",
       checklistAddCategory: "Add category",
       checklistCategoryNamePlaceholder: "Category name",
       checklistDeleteCategoryConfirm: "Delete the \"{name}\" category? All its items will be removed.",

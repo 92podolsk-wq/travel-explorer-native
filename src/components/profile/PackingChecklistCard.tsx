@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, StyleSheet, TouchableOpacity, View } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
+import { NestableDraggableFlatList } from "react-native-draggable-flatlist";
 import { Text } from "@/shared/ui/AppText";
 import { TextInput } from "@/shared/ui/AppTextInput";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -40,6 +41,21 @@ function filterItems(items: ChecklistItem[], filter: ChecklistFilter): Checklist
   return items;
 }
 
+// Dragging reorders only the (possibly filtered) visible items; this merges
+// that new order back into the category's full item array, leaving items
+// hidden by the current filter in their original positions.
+function reorderVisibleWithinAll(all: ChecklistItem[], orderedVisibleIds: string[]): ChecklistItem[] {
+  const byId = new Map(all.map((item) => [item.id, item]));
+  const visibleIdSet = new Set(orderedVisibleIds);
+  let cursor = 0;
+  return all.map((item) => {
+    if (!visibleIdSet.has(item.id)) return item;
+    const nextId = orderedVisibleIds[cursor];
+    cursor += 1;
+    return byId.get(nextId)!;
+  });
+}
+
 type Styles = ReturnType<typeof createStyles>;
 
 function ChecklistSection({
@@ -54,16 +70,15 @@ function ChecklistSection({
   addPlaceholder,
   deleteLabel,
   editLabel,
-  moveUpLabel,
-  moveDownLabel,
   cancelLabel,
   onToggle,
   onRemove,
   onAdd,
   onEdit,
-  onMoveUp,
-  onMoveDown,
-  onDeleteCategory
+  onReorderItems,
+  onDeleteCategory,
+  onDragCategory,
+  isCategoryActive
 }: {
   emoji: string;
   title: string;
@@ -76,16 +91,15 @@ function ChecklistSection({
   addPlaceholder: string;
   deleteLabel: string;
   editLabel: string;
-  moveUpLabel: string;
-  moveDownLabel: string;
   cancelLabel: string;
   onToggle: (id: string) => void;
   onRemove: (id: string) => void;
   onAdd: (label: string) => void;
   onEdit: (id: string, label: string) => void;
-  onMoveUp: (id: string) => void;
-  onMoveDown: (id: string) => void;
+  onReorderItems: (orderedIds: string[]) => void;
   onDeleteCategory: () => void;
+  onDragCategory: () => void;
+  isCategoryActive: boolean;
 }) {
   const [draft, setDraft] = useState("");
   const [isAdding, setIsAdding] = useState(false);
@@ -118,79 +132,88 @@ function ChecklistSection({
   }
 
   function openItemMenu(item: ChecklistItem) {
-    const trueIndex = items.findIndex((current) => current.id === item.id);
-    const options: { text: string; style?: "default" | "cancel" | "destructive"; onPress?: () => void }[] = [
-      { text: editLabel, onPress: () => startEditing(item) }
-    ];
-    if (trueIndex > 0) options.push({ text: moveUpLabel, onPress: () => onMoveUp(item.id) });
-    if (trueIndex < items.length - 1) options.push({ text: moveDownLabel, onPress: () => onMoveDown(item.id) });
-    options.push({ text: deleteLabel, style: "destructive", onPress: () => onRemove(item.id) });
-    options.push({ text: cancelLabel, style: "cancel" });
-    Alert.alert(item.label, undefined, options);
+    Alert.alert(item.label, undefined, [
+      { text: editLabel, onPress: () => startEditing(item) },
+      { text: deleteLabel, style: "destructive", onPress: () => onRemove(item.id) },
+      { text: cancelLabel, style: "cancel" }
+    ]);
   }
 
   return (
-    <View style={styles.section}>
-      <TouchableOpacity style={styles.sectionHeader} onPress={onToggleOpen} activeOpacity={0.7}>
-        <View style={styles.sectionHeaderLeft}>
-          <Text style={styles.sectionEmoji}>{emoji}</Text>
-          <Text style={styles.subTitle}>{title}</Text>
-        </View>
-        <View style={styles.sectionHeaderRight}>
-          <Text style={styles.sectionCount}>
-            {doneCount}/{items.length}
-          </Text>
-          <TouchableOpacity onPress={onDeleteCategory} hitSlop={8}>
-            <Ionicons name="trash-outline" size={15} color={colors.textTertiary} />
-          </TouchableOpacity>
-          <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={16} color={colors.textTertiary} />
-        </View>
-      </TouchableOpacity>
+    <View style={[styles.section, isCategoryActive && styles.sectionActive]}>
+      <View style={styles.sectionHeader}>
+        <TouchableOpacity onLongPress={onDragCategory} delayLongPress={150} style={styles.dragHandle} hitSlop={8}>
+          <Ionicons name="reorder-three" size={18} color={colors.textTertiary} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.sectionHeaderMain} onPress={onToggleOpen} activeOpacity={0.7}>
+          <View style={styles.sectionHeaderLeft}>
+            <Text style={styles.sectionEmoji}>{emoji}</Text>
+            <Text style={styles.subTitle}>{title}</Text>
+          </View>
+          <View style={styles.sectionHeaderRight}>
+            <Text style={styles.sectionCount}>
+              {doneCount}/{items.length}
+            </Text>
+            <TouchableOpacity onPress={onDeleteCategory} hitSlop={8}>
+              <Ionicons name="trash-outline" size={15} color={colors.textTertiary} />
+            </TouchableOpacity>
+            <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={16} color={colors.textTertiary} />
+          </View>
+        </TouchableOpacity>
+      </View>
 
       {isOpen ? (
         <>
-          {visibleItems.map((item) => (
-            <Swipeable
-              key={item.id}
-              renderRightActions={() => (
-                <TouchableOpacity style={styles.deleteAction} onPress={() => onRemove(item.id)}>
-                  <Ionicons name="trash-outline" size={16} color="#fff" />
-                  <Text style={styles.deleteActionLabel}>{deleteLabel}</Text>
-                </TouchableOpacity>
-              )}
-              overshootRight={false}
-            >
-              <View style={styles.itemRow}>
-                {editingItemId === item.id ? (
-                  <TextInput
-                    autoFocus
-                    style={styles.itemEditInput}
-                    value={editDraft}
-                    onChangeText={setEditDraft}
-                    onSubmitEditing={commitEdit}
-                    onBlur={commitEdit}
-                    returnKeyType="done"
-                  />
-                ) : (
-                  <>
-                    <TouchableOpacity style={styles.itemCheckRow} onPress={() => onToggle(item.id)}>
-                      <Ionicons
-                        name={item.checked ? "checkbox" : "square-outline"}
-                        size={20}
-                        color={item.checked ? colors.primary : colors.textTertiary}
-                      />
-                      <Text style={[styles.itemLabel, item.checked && styles.itemLabelChecked]} numberOfLines={1}>
-                        {item.label}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.itemMenuButton} onPress={() => openItemMenu(item)} hitSlop={8}>
-                      <Ionicons name="ellipsis-vertical" size={16} color={colors.textTertiary} />
-                    </TouchableOpacity>
-                  </>
+          <NestableDraggableFlatList
+            data={visibleItems}
+            keyExtractor={(item) => item.id}
+            scrollEnabled={false}
+            onDragEnd={({ data }) => onReorderItems(data.map((item) => item.id))}
+            renderItem={({ item, drag, isActive }) => (
+              <Swipeable
+                renderRightActions={() => (
+                  <TouchableOpacity style={styles.deleteAction} onPress={() => onRemove(item.id)}>
+                    <Ionicons name="trash-outline" size={16} color="#fff" />
+                    <Text style={styles.deleteActionLabel}>{deleteLabel}</Text>
+                  </TouchableOpacity>
                 )}
-              </View>
-            </Swipeable>
-          ))}
+                overshootRight={false}
+              >
+                <View style={[styles.itemRow, isActive && styles.itemRowActive]}>
+                  {editingItemId === item.id ? (
+                    <TextInput
+                      autoFocus
+                      style={styles.itemEditInput}
+                      value={editDraft}
+                      onChangeText={setEditDraft}
+                      onSubmitEditing={commitEdit}
+                      onBlur={commitEdit}
+                      returnKeyType="done"
+                    />
+                  ) : (
+                    <>
+                      <TouchableOpacity onLongPress={drag} delayLongPress={150} style={styles.dragHandle} hitSlop={8}>
+                        <Ionicons name="reorder-three" size={18} color={colors.textTertiary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.itemCheckRow} onPress={() => onToggle(item.id)}>
+                        <Ionicons
+                          name={item.checked ? "checkbox" : "square-outline"}
+                          size={20}
+                          color={item.checked ? colors.primary : colors.textTertiary}
+                        />
+                        <Text style={[styles.itemLabel, item.checked && styles.itemLabelChecked]} numberOfLines={1}>
+                          {item.label}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.itemMenuButton} onPress={() => openItemMenu(item)} hitSlop={8}>
+                        <Ionicons name="ellipsis-vertical" size={16} color={colors.textTertiary} />
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
+              </Swipeable>
+            )}
+          />
 
           {isAdding ? (
             <View style={styles.addRow}>
@@ -279,17 +302,6 @@ export function PackingChecklistCard() {
       categories: state!.categories.map((category) =>
         category.id === categoryId ? { ...category, items: updater(category.items) } : category
       )
-    });
-  }
-
-  function moveItem(categoryId: string, itemId: string, direction: "up" | "down") {
-    updateCategoryItems(categoryId, (items) => {
-      const index = items.findIndex((item) => item.id === itemId);
-      const swapWith = direction === "up" ? index - 1 : index + 1;
-      if (index < 0 || swapWith < 0 || swapWith >= items.length) return items;
-      const next = [...items];
-      [next[index], next[swapWith]] = [next[swapWith], next[index]];
-      return next;
     });
   }
 
@@ -534,38 +546,44 @@ export function PackingChecklistCard() {
         ))}
       </View>
 
-      {state.categories.map((category) => (
-        <ChecklistSection
-          key={category.id}
-          emoji={category.emoji}
-          title={category.title}
-          items={category.items}
-          filter={filter}
-          isOpen={openCategoryIds.has(category.id)}
-          onToggleOpen={() => toggleCategoryOpen(category.id)}
-          colors={colors}
-          styles={styles}
-          addPlaceholder={t.app.checklistAddPlaceholder}
-          deleteLabel={t.app.checklistDeleteItem}
-          editLabel={t.app.checklistEditItem}
-          moveUpLabel={t.app.checklistMoveUp}
-          moveDownLabel={t.app.checklistMoveDown}
-          cancelLabel={t.auth.cancel}
-          onToggle={(id) =>
-            updateCategoryItems(category.id, (items) =>
-              items.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item))
-            )
-          }
-          onRemove={(id) => updateCategoryItems(category.id, (items) => items.filter((item) => item.id !== id))}
-          onAdd={(label) => updateCategoryItems(category.id, (items) => [...items, { id: makeId(), label, checked: false }])}
-          onEdit={(id, label) =>
-            updateCategoryItems(category.id, (items) => items.map((item) => (item.id === id ? { ...item, label } : item)))
-          }
-          onMoveUp={(id) => moveItem(category.id, id, "up")}
-          onMoveDown={(id) => moveItem(category.id, id, "down")}
-          onDeleteCategory={() => confirmDeleteCategory(category)}
-        />
-      ))}
+      <NestableDraggableFlatList
+        data={state.categories}
+        keyExtractor={(category) => category.id}
+        scrollEnabled={false}
+        onDragEnd={({ data }) => applyPatch({ categories: data })}
+        renderItem={({ item: category, drag, isActive }) => (
+          <ChecklistSection
+            emoji={category.emoji}
+            title={category.title}
+            items={category.items}
+            filter={filter}
+            isOpen={openCategoryIds.has(category.id)}
+            onToggleOpen={() => toggleCategoryOpen(category.id)}
+            colors={colors}
+            styles={styles}
+            addPlaceholder={t.app.checklistAddPlaceholder}
+            deleteLabel={t.app.checklistDeleteItem}
+            editLabel={t.app.checklistEditItem}
+            cancelLabel={t.auth.cancel}
+            onToggle={(id) =>
+              updateCategoryItems(category.id, (items) =>
+                items.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item))
+              )
+            }
+            onRemove={(id) => updateCategoryItems(category.id, (items) => items.filter((item) => item.id !== id))}
+            onAdd={(label) => updateCategoryItems(category.id, (items) => [...items, { id: makeId(), label, checked: false }])}
+            onEdit={(id, label) =>
+              updateCategoryItems(category.id, (items) => items.map((item) => (item.id === id ? { ...item, label } : item)))
+            }
+            onReorderItems={(orderedIds) =>
+              updateCategoryItems(category.id, (items) => reorderVisibleWithinAll(items, orderedIds))
+            }
+            onDeleteCategory={() => confirmDeleteCategory(category)}
+            onDragCategory={drag}
+            isCategoryActive={isActive}
+          />
+        )}
+      />
 
       {isAddingCategory ? (
         <View style={styles.addRow}>
@@ -665,12 +683,15 @@ function createStyles(colors: ThemeColors) {
     filterChipLabel: { fontSize: 10, fontWeight: "700", color: colors.textTertiary },
     filterChipLabelActive: { color: colors.textInverse },
     section: { marginBottom: 6 },
-    sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8 },
+    sectionActive: { backgroundColor: colors.background, borderRadius: 10 },
+    sectionHeader: { flexDirection: "row", alignItems: "center", paddingVertical: 8 },
+    sectionHeaderMain: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
     sectionHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
     sectionEmoji: { fontSize: 14 },
     sectionHeaderRight: { flexDirection: "row", alignItems: "center", gap: 10 },
     sectionCount: { fontSize: 11, fontWeight: "600", color: colors.textTertiary },
     subTitle: { fontSize: 13, fontWeight: "700", color: colors.textPrimary },
+    dragHandle: { padding: 4 },
     itemRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -680,6 +701,7 @@ function createStyles(colors: ThemeColors) {
       borderBottomColor: colors.divider,
       backgroundColor: colors.surface
     },
+    itemRowActive: { backgroundColor: colors.background, borderRadius: 8 },
     itemCheckRow: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
     itemLabel: { fontSize: 14, color: colors.textPrimary, flexShrink: 1 },
     itemLabelChecked: { color: colors.textTertiary, textDecorationLine: "line-through" },
