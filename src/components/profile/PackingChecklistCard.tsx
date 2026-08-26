@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { Alert, StyleSheet, TouchableOpacity, View } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
 import { Text } from "@/shared/ui/AppText";
 import { TextInput } from "@/shared/ui/AppTextInput";
@@ -23,6 +23,7 @@ import {
   getChecklistState,
   syncServerChecklistReminder,
   updateChecklistState,
+  type ChecklistCategory,
   type ChecklistItem,
   type PackingChecklistState
 } from "@/shared/storage/packing-checklist";
@@ -52,9 +53,17 @@ function ChecklistSection({
   styles,
   addPlaceholder,
   deleteLabel,
+  editLabel,
+  moveUpLabel,
+  moveDownLabel,
+  cancelLabel,
   onToggle,
   onRemove,
-  onAdd
+  onAdd,
+  onEdit,
+  onMoveUp,
+  onMoveDown,
+  onDeleteCategory
 }: {
   emoji: string;
   title: string;
@@ -66,21 +75,58 @@ function ChecklistSection({
   styles: Styles;
   addPlaceholder: string;
   deleteLabel: string;
+  editLabel: string;
+  moveUpLabel: string;
+  moveDownLabel: string;
+  cancelLabel: string;
   onToggle: (id: string) => void;
   onRemove: (id: string) => void;
   onAdd: (label: string) => void;
+  onEdit: (id: string, label: string) => void;
+  onMoveUp: (id: string) => void;
+  onMoveDown: (id: string) => void;
+  onDeleteCategory: () => void;
 }) {
   const [draft, setDraft] = useState("");
   const [isAdding, setIsAdding] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
   const visibleItems = filterItems(items, filter);
   const doneCount = items.filter((item) => item.checked).length;
 
   function submit() {
     const trimmed = draft.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setIsAdding(false);
+      return;
+    }
     onAdd(trimmed);
     setDraft("");
     setIsAdding(false);
+  }
+
+  function startEditing(item: ChecklistItem) {
+    setEditingItemId(item.id);
+    setEditDraft(item.label);
+  }
+
+  function commitEdit() {
+    if (!editingItemId) return;
+    const trimmed = editDraft.trim();
+    if (trimmed) onEdit(editingItemId, trimmed);
+    setEditingItemId(null);
+  }
+
+  function openItemMenu(item: ChecklistItem) {
+    const trueIndex = items.findIndex((current) => current.id === item.id);
+    const options: { text: string; style?: "default" | "cancel" | "destructive"; onPress?: () => void }[] = [
+      { text: editLabel, onPress: () => startEditing(item) }
+    ];
+    if (trueIndex > 0) options.push({ text: moveUpLabel, onPress: () => onMoveUp(item.id) });
+    if (trueIndex < items.length - 1) options.push({ text: moveDownLabel, onPress: () => onMoveDown(item.id) });
+    options.push({ text: deleteLabel, style: "destructive", onPress: () => onRemove(item.id) });
+    options.push({ text: cancelLabel, style: "cancel" });
+    Alert.alert(item.label, undefined, options);
   }
 
   return (
@@ -94,6 +140,9 @@ function ChecklistSection({
           <Text style={styles.sectionCount}>
             {doneCount}/{items.length}
           </Text>
+          <TouchableOpacity onPress={onDeleteCategory} hitSlop={8}>
+            <Ionicons name="trash-outline" size={15} color={colors.textTertiary} />
+          </TouchableOpacity>
           <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={16} color={colors.textTertiary} />
         </View>
       </TouchableOpacity>
@@ -112,16 +161,33 @@ function ChecklistSection({
               overshootRight={false}
             >
               <View style={styles.itemRow}>
-                <TouchableOpacity style={styles.itemCheckRow} onPress={() => onToggle(item.id)}>
-                  <Ionicons
-                    name={item.checked ? "checkbox" : "square-outline"}
-                    size={20}
-                    color={item.checked ? colors.primary : colors.textTertiary}
+                {editingItemId === item.id ? (
+                  <TextInput
+                    autoFocus
+                    style={styles.itemEditInput}
+                    value={editDraft}
+                    onChangeText={setEditDraft}
+                    onSubmitEditing={commitEdit}
+                    onBlur={commitEdit}
+                    returnKeyType="done"
                   />
-                  <Text style={[styles.itemLabel, item.checked && styles.itemLabelChecked]} numberOfLines={1}>
-                    {item.label}
-                  </Text>
-                </TouchableOpacity>
+                ) : (
+                  <>
+                    <TouchableOpacity style={styles.itemCheckRow} onPress={() => onToggle(item.id)}>
+                      <Ionicons
+                        name={item.checked ? "checkbox" : "square-outline"}
+                        size={20}
+                        color={item.checked ? colors.primary : colors.textTertiary}
+                      />
+                      <Text style={[styles.itemLabel, item.checked && styles.itemLabelChecked]} numberOfLines={1}>
+                        {item.label}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.itemMenuButton} onPress={() => openItemMenu(item)} hitSlop={8}>
+                      <Ionicons name="ellipsis-vertical" size={16} color={colors.textTertiary} />
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
             </Swipeable>
           ))}
@@ -136,9 +202,7 @@ function ChecklistSection({
                 value={draft}
                 onChangeText={setDraft}
                 onSubmitEditing={submit}
-                onBlur={() => {
-                  if (!draft.trim()) setIsAdding(false);
-                }}
+                onBlur={submit}
                 returnKeyType="done"
               />
               <TouchableOpacity style={styles.addButton} onPress={submit}>
@@ -169,11 +233,10 @@ export function PackingChecklistCard() {
   const [shareTargetIds, setShareTargetIds] = useState<Set<string>>(new Set());
   const [pendingShareId, setPendingShareId] = useState<string | null>(null);
   const [filter, setFilter] = useState<ChecklistFilter>("all");
-  const [openPacking, setOpenPacking] = useState(true);
-  const [openDocuments, setOpenDocuments] = useState(false);
-  const [openShopping, setOpenShopping] = useState(false);
-  const [openDeparture, setOpenDeparture] = useState(false);
+  const [openCategoryIds, setOpenCategoryIds] = useState<Set<string>>(new Set());
   const [tripNameDraft, setTripNameDraft] = useState("");
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [categoryDraft, setCategoryDraft] = useState("");
 
   useEffect(() => {
     if (currentUser) {
@@ -191,14 +254,14 @@ export function PackingChecklistCard() {
     setTripNameDraft(state?.tripName ?? "");
   }, [state?.tripName]);
 
-  async function applyPatch(
-    patch: Partial<
-      Pick<
-        PackingChecklistState,
-        "tripName" | "tripStartDate" | "tripEndDate" | "packingItems" | "documentItems" | "shoppingItems" | "departureItems"
-      >
-    >
-  ) {
+  useEffect(() => {
+    if (state && state.categories.length > 0) {
+      setOpenCategoryIds((prev) => (prev.size === 0 ? new Set([state.categories[0].id]) : prev));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state === null]);
+
+  async function applyPatch(patch: Partial<Pick<PackingChecklistState, "tripName" | "tripStartDate" | "tripEndDate" | "categories">>) {
     if (!state) return;
     if (currentUser) {
       const merged = { ...state, ...patch };
@@ -209,6 +272,61 @@ export function PackingChecklistCard() {
       const updated = await updateChecklistState(state, patch);
       setState(updated);
     }
+  }
+
+  function updateCategoryItems(categoryId: string, updater: (items: ChecklistItem[]) => ChecklistItem[]) {
+    applyPatch({
+      categories: state!.categories.map((category) =>
+        category.id === categoryId ? { ...category, items: updater(category.items) } : category
+      )
+    });
+  }
+
+  function moveItem(categoryId: string, itemId: string, direction: "up" | "down") {
+    updateCategoryItems(categoryId, (items) => {
+      const index = items.findIndex((item) => item.id === itemId);
+      const swapWith = direction === "up" ? index - 1 : index + 1;
+      if (index < 0 || swapWith < 0 || swapWith >= items.length) return items;
+      const next = [...items];
+      [next[index], next[swapWith]] = [next[swapWith], next[index]];
+      return next;
+    });
+  }
+
+  function toggleCategoryOpen(categoryId: string) {
+    setOpenCategoryIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(categoryId)) {
+        next.delete(categoryId);
+      } else {
+        next.add(categoryId);
+      }
+      return next;
+    });
+  }
+
+  function submitCategory() {
+    const trimmed = categoryDraft.trim();
+    if (!trimmed) {
+      setIsAddingCategory(false);
+      return;
+    }
+    const category: ChecklistCategory = { id: makeId(), title: trimmed, emoji: "🗂", items: [] };
+    applyPatch({ categories: [...state!.categories, category] });
+    setOpenCategoryIds((prev) => new Set(prev).add(category.id));
+    setCategoryDraft("");
+    setIsAddingCategory(false);
+  }
+
+  function confirmDeleteCategory(category: ChecklistCategory) {
+    Alert.alert(t.app.checklistDeleteCategoryConfirm.replace("{name}", category.title), undefined, [
+      { text: t.auth.cancel, style: "cancel" },
+      {
+        text: t.auth.delete,
+        style: "destructive",
+        onPress: () => applyPatch({ categories: state!.categories.filter((c) => c.id !== category.id) })
+      }
+    ]);
   }
 
   function openShare() {
@@ -274,13 +392,11 @@ export function PackingChecklistCard() {
     return days >= 0 ? days : null;
   })();
 
-  const totalCount =
-    state.packingItems.length + state.documentItems.length + state.shoppingItems.length + state.departureItems.length;
-  const doneCount =
-    state.packingItems.filter((item) => item.checked).length +
-    state.documentItems.filter((item) => item.checked).length +
-    state.shoppingItems.filter((item) => item.checked).length +
-    state.departureItems.filter((item) => item.checked).length;
+  const totalCount = state.categories.reduce((sum, category) => sum + category.items.length, 0);
+  const doneCount = state.categories.reduce(
+    (sum, category) => sum + category.items.filter((item) => item.checked).length,
+    0
+  );
   const progressPercent = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
   const isAllDone = totalCount > 0 && doneCount === totalCount;
 
@@ -418,85 +534,62 @@ export function PackingChecklistCard() {
         ))}
       </View>
 
-      <ChecklistSection
-        emoji="🧳"
-        title={t.app.checklistPackingTitle}
-        items={state.packingItems}
-        filter={filter}
-        isOpen={openPacking}
-        onToggleOpen={() => setOpenPacking((value) => !value)}
-        colors={colors}
-        styles={styles}
-        addPlaceholder={t.app.checklistAddPlaceholder}
-        deleteLabel={t.app.checklistDeleteItem}
-        onToggle={(id) =>
-          applyPatch({
-            packingItems: state.packingItems.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item))
-          })
-        }
-        onRemove={(id) => applyPatch({ packingItems: state.packingItems.filter((item) => item.id !== id) })}
-        onAdd={(label) => applyPatch({ packingItems: [...state.packingItems, { id: makeId(), label, checked: false }] })}
-      />
+      {state.categories.map((category) => (
+        <ChecklistSection
+          key={category.id}
+          emoji={category.emoji}
+          title={category.title}
+          items={category.items}
+          filter={filter}
+          isOpen={openCategoryIds.has(category.id)}
+          onToggleOpen={() => toggleCategoryOpen(category.id)}
+          colors={colors}
+          styles={styles}
+          addPlaceholder={t.app.checklistAddPlaceholder}
+          deleteLabel={t.app.checklistDeleteItem}
+          editLabel={t.app.checklistEditItem}
+          moveUpLabel={t.app.checklistMoveUp}
+          moveDownLabel={t.app.checklistMoveDown}
+          cancelLabel={t.auth.cancel}
+          onToggle={(id) =>
+            updateCategoryItems(category.id, (items) =>
+              items.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item))
+            )
+          }
+          onRemove={(id) => updateCategoryItems(category.id, (items) => items.filter((item) => item.id !== id))}
+          onAdd={(label) => updateCategoryItems(category.id, (items) => [...items, { id: makeId(), label, checked: false }])}
+          onEdit={(id, label) =>
+            updateCategoryItems(category.id, (items) => items.map((item) => (item.id === id ? { ...item, label } : item)))
+          }
+          onMoveUp={(id) => moveItem(category.id, id, "up")}
+          onMoveDown={(id) => moveItem(category.id, id, "down")}
+          onDeleteCategory={() => confirmDeleteCategory(category)}
+        />
+      ))}
 
-      <ChecklistSection
-        emoji="📄"
-        title={t.app.checklistDocumentsTitle}
-        items={state.documentItems}
-        filter={filter}
-        isOpen={openDocuments}
-        onToggleOpen={() => setOpenDocuments((value) => !value)}
-        colors={colors}
-        styles={styles}
-        addPlaceholder={t.app.checklistAddPlaceholder}
-        deleteLabel={t.app.checklistDeleteItem}
-        onToggle={(id) =>
-          applyPatch({
-            documentItems: state.documentItems.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item))
-          })
-        }
-        onRemove={(id) => applyPatch({ documentItems: state.documentItems.filter((item) => item.id !== id) })}
-        onAdd={(label) => applyPatch({ documentItems: [...state.documentItems, { id: makeId(), label, checked: false }] })}
-      />
-
-      <ChecklistSection
-        emoji="🛍"
-        title={t.app.checklistShoppingTitle}
-        items={state.shoppingItems}
-        filter={filter}
-        isOpen={openShopping}
-        onToggleOpen={() => setOpenShopping((value) => !value)}
-        colors={colors}
-        styles={styles}
-        addPlaceholder={t.app.checklistAddPlaceholder}
-        deleteLabel={t.app.checklistDeleteItem}
-        onToggle={(id) =>
-          applyPatch({
-            shoppingItems: state.shoppingItems.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item))
-          })
-        }
-        onRemove={(id) => applyPatch({ shoppingItems: state.shoppingItems.filter((item) => item.id !== id) })}
-        onAdd={(label) => applyPatch({ shoppingItems: [...state.shoppingItems, { id: makeId(), label, checked: false }] })}
-      />
-
-      <ChecklistSection
-        emoji="🏠"
-        title={t.app.checklistDepartureTitle}
-        items={state.departureItems}
-        filter={filter}
-        isOpen={openDeparture}
-        onToggleOpen={() => setOpenDeparture((value) => !value)}
-        colors={colors}
-        styles={styles}
-        addPlaceholder={t.app.checklistAddPlaceholder}
-        deleteLabel={t.app.checklistDeleteItem}
-        onToggle={(id) =>
-          applyPatch({
-            departureItems: state.departureItems.map((item) => (item.id === id ? { ...item, checked: !item.checked } : item))
-          })
-        }
-        onRemove={(id) => applyPatch({ departureItems: state.departureItems.filter((item) => item.id !== id) })}
-        onAdd={(label) => applyPatch({ departureItems: [...state.departureItems, { id: makeId(), label, checked: false }] })}
-      />
+      {isAddingCategory ? (
+        <View style={styles.addRow}>
+          <TextInput
+            autoFocus
+            style={styles.addInput}
+            placeholder={t.app.checklistCategoryNamePlaceholder}
+            placeholderTextColor={colors.placeholder}
+            value={categoryDraft}
+            onChangeText={setCategoryDraft}
+            onSubmitEditing={submitCategory}
+            onBlur={submitCategory}
+            returnKeyType="done"
+          />
+          <TouchableOpacity style={styles.addButton} onPress={submitCategory}>
+            <Ionicons name="add" size={18} color={colors.textInverse} />
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity style={styles.addLink} onPress={() => setIsAddingCategory(true)}>
+          <Ionicons name="add" size={14} color={colors.primary} />
+          <Text style={styles.addLinkLabel}>{t.app.checklistAddCategory}</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -575,7 +668,7 @@ function createStyles(colors: ThemeColors) {
     sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8 },
     sectionHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 6 },
     sectionEmoji: { fontSize: 14 },
-    sectionHeaderRight: { flexDirection: "row", alignItems: "center", gap: 6 },
+    sectionHeaderRight: { flexDirection: "row", alignItems: "center", gap: 10 },
     sectionCount: { fontSize: 11, fontWeight: "600", color: colors.textTertiary },
     subTitle: { fontSize: 13, fontWeight: "700", color: colors.textPrimary },
     itemRow: {
@@ -590,6 +683,17 @@ function createStyles(colors: ThemeColors) {
     itemCheckRow: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
     itemLabel: { fontSize: 14, color: colors.textPrimary, flexShrink: 1 },
     itemLabelChecked: { color: colors.textTertiary, textDecorationLine: "line-through" },
+    itemMenuButton: { paddingHorizontal: 6, paddingVertical: 4 },
+    itemEditInput: {
+      flex: 1,
+      fontSize: 14,
+      color: colors.textPrimary,
+      padding: 0,
+      backgroundColor: colors.background,
+      borderRadius: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 4
+    },
     deleteAction: {
       width: 64,
       alignItems: "center",

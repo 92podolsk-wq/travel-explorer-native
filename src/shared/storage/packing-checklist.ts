@@ -3,14 +3,13 @@ import * as Notifications from "expo-notifications";
 
 export type ChecklistItem = { id: string; label: string; checked: boolean };
 
+export type ChecklistCategory = { id: string; title: string; emoji: string; items: ChecklistItem[] };
+
 export type PackingChecklistState = {
   tripName: string | null;
   tripStartDate: string | null;
   tripEndDate: string | null;
-  packingItems: ChecklistItem[];
-  documentItems: ChecklistItem[];
-  shoppingItems: ChecklistItem[];
-  departureItems: ChecklistItem[];
+  categories: ChecklistCategory[];
   reminderNotificationId: string | null;
 };
 
@@ -39,37 +38,53 @@ function itemsFrom(labels: string[]): ChecklistItem[] {
   return labels.map((label) => ({ id: makeId(), label, checked: false }));
 }
 
+function defaultCategories(): ChecklistCategory[] {
+  return [
+    { id: "packing", title: "Взять с собой", emoji: "🧳", items: itemsFrom(DEFAULT_PACKING_LABELS) },
+    { id: "documents", title: "Документы", emoji: "📄", items: itemsFrom(DEFAULT_DOCUMENT_LABELS) }
+  ];
+}
+
 function defaultState(): PackingChecklistState {
   return {
     tripName: null,
     tripStartDate: null,
     tripEndDate: null,
-    packingItems: itemsFrom(DEFAULT_PACKING_LABELS),
-    documentItems: itemsFrom(DEFAULT_DOCUMENT_LABELS),
-    shoppingItems: [],
-    departureItems: [],
+    categories: defaultCategories(),
     reminderNotificationId: null
   };
 }
 
-// Devices that installed the app before this redesign may still have the old
-// shape saved (`tripDate`, no document/departure arrays) — backfill it on
-// read instead of discarding the user's saved items.
+// Devices that installed the app before this redesign may still have an
+// older shape saved — either the pre-redesign shape (`tripDate`, no
+// document/departure arrays) or the pre-categories shape (4 fixed item
+// arrays instead of `categories`). Backfill both on read instead of
+// discarding the user's saved items.
 type LegacyPackingChecklistState = {
   tripDate?: string | null;
   packingItems?: ChecklistItem[];
+  documentItems?: ChecklistItem[];
   shoppingItems?: ChecklistItem[];
+  departureItems?: ChecklistItem[];
 };
 
-function migrateState(raw: PackingChecklistState & LegacyPackingChecklistState): PackingChecklistState {
+function migrateState(
+  raw: Partial<PackingChecklistState> & LegacyPackingChecklistState
+): PackingChecklistState {
+  const categories =
+    raw.categories ??
+    [
+      { id: "packing", title: "Взять с собой", emoji: "🧳", items: raw.packingItems ?? [] },
+      { id: "documents", title: "Документы", emoji: "📄", items: raw.documentItems ?? [] },
+      { id: "shopping", title: "Купить", emoji: "🛍", items: raw.shoppingItems ?? [] },
+      { id: "departure", title: "Перед выездом", emoji: "🏠", items: raw.departureItems ?? [] }
+    ];
+
   return {
     tripName: raw.tripName ?? null,
     tripStartDate: raw.tripStartDate ?? raw.tripDate ?? null,
     tripEndDate: raw.tripEndDate ?? null,
-    packingItems: raw.packingItems ?? [],
-    documentItems: raw.documentItems ?? [],
-    shoppingItems: raw.shoppingItems ?? [],
-    departureItems: raw.departureItems ?? [],
+    categories,
     reminderNotificationId: raw.reminderNotificationId ?? null
   };
 }
@@ -92,18 +107,8 @@ async function persist(state: PackingChecklistState): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-function hasUncheckedItems(state: {
-  packingItems: ChecklistItem[];
-  documentItems: ChecklistItem[];
-  shoppingItems: ChecklistItem[];
-  departureItems: ChecklistItem[];
-}): boolean {
-  return (
-    state.packingItems.some((item) => !item.checked) ||
-    state.documentItems.some((item) => !item.checked) ||
-    state.shoppingItems.some((item) => !item.checked) ||
-    state.departureItems.some((item) => !item.checked)
-  );
+function hasUncheckedItems(state: { categories: ChecklistCategory[] }): boolean {
+  return state.categories.some((category) => category.items.some((item) => !item.checked));
 }
 
 /** Cancels any stale reminder and reschedules one if the trip is <24h away with unpacked items. */
@@ -135,12 +140,7 @@ async function syncReminder(state: PackingChecklistState): Promise<PackingCheckl
 /** Applies a partial update, re-syncs the reminder, persists, and returns the new state. */
 export async function updateChecklistState(
   current: PackingChecklistState,
-  patch: Partial<
-    Pick<
-      PackingChecklistState,
-      "tripName" | "tripStartDate" | "tripEndDate" | "packingItems" | "documentItems" | "shoppingItems" | "departureItems"
-    >
-  >
+  patch: Partial<Pick<PackingChecklistState, "tripName" | "tripStartDate" | "tripEndDate" | "categories">>
 ): Promise<PackingChecklistState> {
   const merged = { ...current, ...patch };
   const withReminder = await syncReminder(merged);
@@ -156,10 +156,7 @@ const SERVER_REMINDER_KEY = "wayora:packingChecklistServerReminderId";
 // checklist content rather than round-tripped to the server.
 export async function syncServerChecklistReminder(content: {
   tripStartDate: string | null;
-  packingItems: ChecklistItem[];
-  documentItems: ChecklistItem[];
-  shoppingItems: ChecklistItem[];
-  departureItems: ChecklistItem[];
+  categories: ChecklistCategory[];
 }): Promise<void> {
   const existingId = await AsyncStorage.getItem(SERVER_REMINDER_KEY);
   if (existingId) {

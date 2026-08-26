@@ -7,9 +7,15 @@ jest.mock("expo-notifications", () => ({
 }));
 
 import * as Notifications from "expo-notifications";
-import { getChecklistState, updateChecklistState, type PackingChecklistState } from "./packing-checklist";
+import { getChecklistState, updateChecklistState, type ChecklistCategory, type PackingChecklistState } from "./packing-checklist";
 
 const STORAGE_KEY = "wayora:packingChecklist";
+
+function findCategory(categories: ChecklistCategory[], id: string): ChecklistCategory {
+  const category = categories.find((c) => c.id === id);
+  if (!category) throw new Error(`category ${id} not found`);
+  return category;
+}
 
 describe("getChecklistState", () => {
   beforeEach(async () => {
@@ -23,10 +29,11 @@ describe("getChecklistState", () => {
     expect(state.tripName).toBeNull();
     expect(state.tripStartDate).toBeNull();
     expect(state.tripEndDate).toBeNull();
-    expect(state.documentItems.map((item) => item.label)).toContain("Паспорт / документы");
-    expect(state.packingItems.map((item) => item.label)).not.toContain("Паспорт / документы");
-    expect(state.shoppingItems).toEqual([]);
-    expect(state.departureItems).toEqual([]);
+
+    const packing = findCategory(state.categories, "packing");
+    const documents = findCategory(state.categories, "documents");
+    expect(documents.items.map((item) => item.label)).toContain("Паспорт / документы");
+    expect(packing.items.map((item) => item.label)).not.toContain("Паспорт / документы");
   });
 
   it("backfills a pre-redesign stored shape (tripDate, no document/departure arrays)", async () => {
@@ -43,10 +50,29 @@ describe("getChecklistState", () => {
     expect(state.tripStartDate).toBe("2026-05-12T00:00:00.000Z");
     expect(state.tripEndDate).toBeNull();
     expect(state.tripName).toBeNull();
-    expect(state.packingItems).toEqual(legacy.packingItems);
-    expect(state.shoppingItems).toEqual(legacy.shoppingItems);
-    expect(state.documentItems).toEqual([]);
-    expect(state.departureItems).toEqual([]);
+    expect(findCategory(state.categories, "packing").items).toEqual(legacy.packingItems);
+    expect(findCategory(state.categories, "shopping").items).toEqual(legacy.shoppingItems);
+    expect(findCategory(state.categories, "documents").items).toEqual([]);
+    expect(findCategory(state.categories, "departure").items).toEqual([]);
+  });
+
+  it("backfills a pre-categories stored shape (4 fixed item arrays, no categories field)", async () => {
+    const legacy = {
+      tripStartDate: null,
+      tripEndDate: null,
+      tripName: null,
+      packingItems: [{ id: "p1", label: "Зарядка", checked: false }],
+      documentItems: [{ id: "d1", label: "Паспорт", checked: true }],
+      shoppingItems: [],
+      departureItems: [],
+      reminderNotificationId: null
+    };
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(legacy));
+
+    const state = await getChecklistState();
+
+    expect(findCategory(state.categories, "packing").items).toEqual(legacy.packingItems);
+    expect(findCategory(state.categories, "documents").items).toEqual(legacy.documentItems);
   });
 });
 
@@ -55,10 +81,10 @@ describe("updateChecklistState reminder scheduling", () => {
     tripName: null,
     tripStartDate: null,
     tripEndDate: null,
-    packingItems: [],
-    documentItems: [],
-    shoppingItems: [],
-    departureItems: [],
+    categories: [
+      { id: "packing", title: "Взять с собой", emoji: "🧳", items: [] },
+      { id: "documents", title: "Документы", emoji: "📄", items: [] }
+    ],
     reminderNotificationId: null
   };
 
@@ -74,7 +100,10 @@ describe("updateChecklistState reminder scheduling", () => {
 
     const updated = await updateChecklistState(baseState, {
       tripStartDate: soon,
-      departureItems: [{ id: "d1", label: "Выключить утюг", checked: false }]
+      categories: [
+        ...baseState.categories,
+        { id: "departure", title: "Перед выездом", emoji: "🏠", items: [{ id: "d1", label: "Выключить утюг", checked: false }] }
+      ]
     });
 
     expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
@@ -86,7 +115,10 @@ describe("updateChecklistState reminder scheduling", () => {
 
     const updated = await updateChecklistState(baseState, {
       tripStartDate: soon,
-      packingItems: [{ id: "p1", label: "Зарядка", checked: true }]
+      categories: [
+        { id: "packing", title: "Взять с собой", emoji: "🧳", items: [{ id: "p1", label: "Зарядка", checked: true }] },
+        { id: "documents", title: "Документы", emoji: "📄", items: [] }
+      ]
     });
 
     expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
@@ -98,7 +130,10 @@ describe("updateChecklistState reminder scheduling", () => {
 
     const updated = await updateChecklistState(baseState, {
       tripStartDate: past,
-      packingItems: [{ id: "p1", label: "Зарядка", checked: false }]
+      categories: [
+        { id: "packing", title: "Взять с собой", emoji: "🧳", items: [{ id: "p1", label: "Зарядка", checked: false }] },
+        { id: "documents", title: "Документы", emoji: "📄", items: [] }
+      ]
     });
 
     expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();

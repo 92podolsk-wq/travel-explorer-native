@@ -31,12 +31,7 @@ export function SharedChecklistsCard() {
       <Text style={styles.cardTitle}>{t.auth.sharedChecklistsTitle}</Text>
       {shared.map(({ owner, checklist }) => {
         const isOpen = openOwnerId === owner.id;
-        const items = [
-          ...checklist.packingItems,
-          ...checklist.documentItems,
-          ...checklist.shoppingItems,
-          ...checklist.departureItems
-        ];
+        const items = checklist.categories.flatMap((category) => category.items);
         const checkedCount = items.filter((item) => item.checked).length;
         return (
           <View key={owner.id} style={styles.ownerBlock}>

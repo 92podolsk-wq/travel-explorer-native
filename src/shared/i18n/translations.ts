@@ -20,6 +20,12 @@ type TranslationDictionary = {
     checklistDepartureTitle: string;
     checklistAddPlaceholder: string;
     checklistDeleteItem: string;
+    checklistEditItem: string;
+    checklistMoveUp: string;
+    checklistMoveDown: string;
+    checklistAddCategory: string;
+    checklistCategoryNamePlaceholder: string;
+    checklistDeleteCategoryConfirm: string;
     checklistFilterAll: string;
     checklistFilterIncomplete: string;
     checklistFilterComplete: string;
@@ -321,6 +327,12 @@ export const translations: Record<Language, TranslationDictionary> = {
       checklistDepartureTitle: "Перед выездом",
       checklistAddPlaceholder: "Добавить пункт",
       checklistDeleteItem: "Удалить",
+      checklistEditItem: "Редактировать",
+      checklistMoveUp: "Переместить вверх",
+      checklistMoveDown: "Переместить вниз",
+      checklistAddCategory: "Добавить категорию",
+      checklistCategoryNamePlaceholder: "Название категории",
+      checklistDeleteCategoryConfirm: "Удалить категорию «{name}»? Все пункты в ней будут удалены.",
       checklistFilterAll: "Все",
       checklistFilterIncomplete: "Не выполнено",
       checklistFilterComplete: "Выполнено",
@@ -634,6 +646,12 @@ export const translations: Record<Language, TranslationDictionary> = {
       checklistDepartureTitle: "Before you leave",
       checklistAddPlaceholder: "Add an item",
       checklistDeleteItem: "Delete",
+      checklistEditItem: "Edit",
+      checklistMoveUp: "Move up",
+      checklistMoveDown: "Move down",
+      checklistAddCategory: "Add category",
+      checklistCategoryNamePlaceholder: "Category name",
+      checklistDeleteCategoryConfirm: "Delete the \"{name}\" category? All its items will be removed.",
       checklistFilterAll: "All",
       checklistFilterIncomplete: "To do",
       checklistFilterComplete: "Done",
