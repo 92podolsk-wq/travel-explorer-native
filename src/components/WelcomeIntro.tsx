@@ -59,7 +59,7 @@ const PALETTES: Record<TimeOfDay, Palette> = {
     pathOpacity: 1,
     markerColor: "#f2894a",
     wordmarkColor: "#4a2e40",
-    greetingColor: "#4a2e40",
+    greetingColor: "#f6efe0",
     stars: false
   },
   day: {
@@ -73,7 +73,7 @@ const PALETTES: Record<TimeOfDay, Palette> = {
     pathOpacity: 1,
     markerColor: "#e8672e",
     wordmarkColor: "#204f37",
-    greetingColor: "#204f37",
+    greetingColor: "#f6efe0",
     stars: false
   },
   evening: {
@@ -87,7 +87,7 @@ const PALETTES: Record<TimeOfDay, Palette> = {
     pathOpacity: 1,
     markerColor: "#ff8a3d",
     wordmarkColor: "#3d2540",
-    greetingColor: "#3d2540",
+    greetingColor: "#f6efe0",
     stars: false
   },
   night: {
