@@ -14,20 +14,19 @@ import { ProfileAvatar } from "@/shared/ui/ProfileAvatar";
 import { getFriends } from "@/shared/api/friends";
 import {
   getChecklistShareTargets,
-  getServerChecklist,
   shareChecklistWithFriend,
   unshareChecklistWithFriend,
   updateServerChecklist
 } from "@/shared/api/checklist";
 import type { FriendUser } from "@/entities/user/model/types";
 import {
-  getChecklistState,
   syncServerChecklistReminder,
   updateChecklistState,
   type ChecklistCategory,
   type ChecklistItem,
   type PackingChecklistState
 } from "@/shared/storage/packing-checklist";
+import { useChecklistState } from "./hooks/useChecklistState";
 
 function makeId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -249,7 +248,7 @@ export function PackingChecklistCard() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const currentUser = useExplorerStore((state) => state.currentUser);
-  const [state, setState] = useState<PackingChecklistState | null>(null);
+  const [state, setState] = useChecklistState(currentUser?.id ?? null);
   const [openDatePicker, setOpenDatePicker] = useState<"start" | "end" | null>(null);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [friends, setFriends] = useState<FriendUser[]>([]);
@@ -260,18 +259,6 @@ export function PackingChecklistCard() {
   const [tripNameDraft, setTripNameDraft] = useState("");
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [categoryDraft, setCategoryDraft] = useState("");
-
-  useEffect(() => {
-    if (currentUser) {
-      getServerChecklist().then(({ checklist }) => {
-        setState({ ...checklist, reminderNotificationId: null });
-        void syncServerChecklistReminder(checklist);
-      });
-    } else {
-      getChecklistState().then(setState);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id]);
 
   useEffect(() => {
     setTripNameDraft(state?.tripName ?? "");

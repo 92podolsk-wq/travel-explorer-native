@@ -7,7 +7,13 @@ jest.mock("expo-notifications", () => ({
 }));
 
 import * as Notifications from "expo-notifications";
-import { getChecklistState, updateChecklistState, type ChecklistCategory, type PackingChecklistState } from "./packing-checklist";
+import {
+  getChecklistState,
+  migrateState,
+  updateChecklistState,
+  type ChecklistCategory,
+  type PackingChecklistState
+} from "./packing-checklist";
 
 const STORAGE_KEY = "wayora:packingChecklist";
 
@@ -73,6 +79,24 @@ describe("getChecklistState", () => {
 
     expect(findCategory(state.categories, "packing").items).toEqual(legacy.packingItems);
     expect(findCategory(state.categories, "documents").items).toEqual(legacy.documentItems);
+  });
+});
+
+describe("migrateState", () => {
+  it("defaults categories to an empty array's worth of built-ins when entirely missing", () => {
+    const migrated = migrateState({});
+    expect(migrated.categories.map((c) => c.id)).toEqual(["packing", "documents", "shopping", "departure"]);
+  });
+
+  it("passes through an already-current shape unchanged", () => {
+    const current: PackingChecklistState = {
+      tripName: "Osaka",
+      tripStartDate: null,
+      tripEndDate: null,
+      categories: [{ id: "custom-1", title: "Extras", emoji: "✨", items: [] }],
+      reminderNotificationId: null
+    };
+    expect(migrateState(current)).toEqual(current);
   });
 });
 

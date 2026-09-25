@@ -68,7 +68,7 @@ type LegacyPackingChecklistState = {
   departureItems?: ChecklistItem[];
 };
 
-function migrateState(
+export function migrateState(
   raw: Partial<PackingChecklistState> & LegacyPackingChecklistState
 ): PackingChecklistState {
   const categories =
