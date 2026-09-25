@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { Text } from "@/shared/ui/AppText";
 import { Ionicons } from "@expo/vector-icons";
@@ -7,22 +7,15 @@ import { useTheme } from "@/shared/theme/useTheme";
 import type { ThemeColors } from "@/shared/theme/colors";
 import { useExplorerStore } from "@/shared/model/explorer-store";
 import { ProfileAvatar } from "@/shared/ui/ProfileAvatar";
-import { getChecklistsSharedWithMe } from "@/shared/api/checklist";
-import type { SharedChecklist } from "@/entities/sharing/model/types";
+import { useSharedChecklists } from "./hooks/useSharedChecklists";
 
 export function SharedChecklistsCard() {
   const t = useTranslations();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const currentUser = useExplorerStore((state) => state.currentUser);
-  const [shared, setShared] = useState<SharedChecklist[] | null>(null);
+  const shared = useSharedChecklists(currentUser?.id ?? null);
   const [openOwnerId, setOpenOwnerId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!currentUser) return;
-    getChecklistsSharedWithMe().then((body) => setShared(body.checklists));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id]);
 
   if (!currentUser || !shared || shared.length === 0) return null;
 
