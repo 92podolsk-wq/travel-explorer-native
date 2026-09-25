@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, ScrollView, Share, StyleSheet, TouchableOpacity, View } from "react-native";
 import { Text } from "@/shared/ui/AppText";
 import { TextInput } from "@/shared/ui/AppTextInput";
@@ -10,6 +10,7 @@ import { useExplorerStore } from "@/shared/model/explorer-store";
 import { API_ORIGIN } from "@/shared/api/client";
 import { useEnsureItineraryLoaded } from "@/shared/model/use-ensure-itinerary";
 import { useItineraryRealtime } from "@/shared/realtime/useItineraryRealtime";
+import { useActiveItinerarySync } from "./hooks/useActiveItinerarySync";
 import {
   addItineraryDay,
   addItineraryStop,
@@ -118,18 +119,7 @@ export function RouteScreen() {
     saveWidgetTripSummary({ title: itinerary.title, startDate: itinerary.startDate }).then(refreshTripCountdownWidget);
   }, [itinerary]);
 
-  // Companions co-editing the same shared itinerary see each other's changes
-  // via useItineraryRealtime's WebSocket almost instantly; its focus-refetch
-  // + slow poll is just the fallback for whenever the socket is down (e.g.
-  // briefly backgrounded on mobile), so the trip still stays in sync
-  // without a manual restart.
-  const refreshItinerary = useCallback(() => {
-    if (!activeItineraryId) return;
-    getItinerary(activeItineraryId)
-      .then((full) => setItinerary(full))
-      .catch(() => {});
-  }, [activeItineraryId, setItinerary]);
-
+  const { refreshItinerary, fetchItineraryIfStillActive } = useActiveItinerarySync(activeItineraryId, setItinerary);
   const presenceUsers = useItineraryRealtime(activeItineraryId, refreshItinerary);
   const otherPresenceUsers = presenceUsers.filter((u) => u.id !== currentUser?.id);
 
@@ -142,8 +132,7 @@ export function RouteScreen() {
 
   async function handleSwitchItinerary(id: string) {
     setActiveItineraryId(id);
-    const full = await getItinerary(id);
-    setItinerary(full);
+    await fetchItineraryIfStillActive(id);
   }
 
   async function handleCreateItinerary() {
