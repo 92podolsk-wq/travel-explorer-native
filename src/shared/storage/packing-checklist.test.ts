@@ -8,12 +8,14 @@ jest.mock("expo-notifications", () => ({
 
 import * as Notifications from "expo-notifications";
 import {
+  categoryDisplayTitle,
   getChecklistState,
   migrateState,
   updateChecklistState,
   type ChecklistCategory,
   type PackingChecklistState
 } from "./packing-checklist";
+import { getTranslations } from "@/shared/i18n/translations";
 
 const STORAGE_KEY = "wayora:packingChecklist";
 
@@ -97,6 +99,31 @@ describe("migrateState", () => {
       reminderNotificationId: null
     };
     expect(migrateState(current)).toEqual(current);
+  });
+});
+
+describe("categoryDisplayTitle", () => {
+  const ru = getTranslations("ru");
+  const en = getTranslations("en");
+
+  it("translates a built-in category's title by id, ignoring its saved title", () => {
+    const category: ChecklistCategory = { id: "packing", title: "some stale saved title", emoji: "🧳", items: [] };
+    expect(categoryDisplayTitle(category, ru)).toBe(ru.app.checklistPackingTitle);
+    expect(categoryDisplayTitle(category, en)).toBe(en.app.checklistPackingTitle);
+  });
+
+  it("covers all four built-in ids", () => {
+    const ids = ["packing", "documents", "shopping", "departure"] as const;
+    for (const id of ids) {
+      const category: ChecklistCategory = { id, title: "irrelevant", emoji: "x", items: [] };
+      expect(categoryDisplayTitle(category, en)).not.toBe("irrelevant");
+    }
+  });
+
+  it("falls back to the saved title for a user-created category", () => {
+    const category: ChecklistCategory = { id: "custom-42", title: "Гаджеты", emoji: "🔌", items: [] };
+    expect(categoryDisplayTitle(category, ru)).toBe("Гаджеты");
+    expect(categoryDisplayTitle(category, en)).toBe("Гаджеты");
   });
 });
 

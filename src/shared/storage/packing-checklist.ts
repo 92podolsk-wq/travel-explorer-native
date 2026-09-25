@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
+import type { getTranslations } from "@/shared/i18n/translations";
 
 export type ChecklistItem = { id: string; label: string; checked: boolean };
 
@@ -38,11 +39,37 @@ function itemsFrom(labels: string[]): ChecklistItem[] {
   return labels.map((label) => ({ id: makeId(), label, checked: false }));
 }
 
+// title here is only a seed/fallback value persisted to storage — the UI
+// always displays a built-in category's title via categoryDisplayTitle
+// below, translated by id, so this hardcoded Russian text never actually
+// reaches the screen. Kept as-is (rather than localized at creation time)
+// so already-saved checklists don't need a data migration.
 function defaultCategories(): ChecklistCategory[] {
   return [
     { id: "packing", title: "Взять с собой", emoji: "🧳", items: itemsFrom(DEFAULT_PACKING_LABELS) },
     { id: "documents", title: "Документы", emoji: "📄", items: itemsFrom(DEFAULT_DOCUMENT_LABELS) }
   ];
+}
+
+type Translations = ReturnType<typeof getTranslations>;
+
+const BUILT_IN_CATEGORY_TITLE_KEYS: Partial<Record<string, keyof Translations["app"]>> = {
+  packing: "checklistPackingTitle",
+  documents: "checklistDocumentsTitle",
+  shopping: "checklistShoppingTitle",
+  departure: "checklistDepartureTitle"
+};
+
+/**
+ * Built-in categories (packing/documents/shopping/departure) are labeled
+ * from translations by id, so the UI follows the current language even
+ * though the title saved on the category itself is fixed at creation time.
+ * A user-created category has no matching id here, so it falls through to
+ * its own saved title.
+ */
+export function categoryDisplayTitle(category: ChecklistCategory, t: Translations): string {
+  const key = BUILT_IN_CATEGORY_TITLE_KEYS[category.id];
+  return key ? t.app[key] : category.title;
 }
 
 function defaultState(): PackingChecklistState {

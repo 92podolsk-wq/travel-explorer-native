@@ -20,6 +20,7 @@ import {
 } from "@/shared/api/checklist";
 import type { FriendUser } from "@/entities/user/model/types";
 import {
+  categoryDisplayTitle,
   syncServerChecklistReminder,
   updateChecklistState,
   type ChecklistCategory,
@@ -318,7 +319,7 @@ export function PackingChecklistCard() {
   }
 
   function confirmDeleteCategory(category: ChecklistCategory) {
-    Alert.alert(t.app.checklistDeleteCategoryConfirm.replace("{name}", category.title), undefined, [
+    Alert.alert(t.app.checklistDeleteCategoryConfirm.replace("{name}", categoryDisplayTitle(category, t)), undefined, [
       { text: t.auth.cancel, style: "cancel" },
       {
         text: t.auth.delete,
@@ -541,7 +542,7 @@ export function PackingChecklistCard() {
         renderItem={({ item: category, drag, isActive }) => (
           <ChecklistSection
             emoji={category.emoji}
-            title={category.title}
+            title={categoryDisplayTitle(category, t)}
             items={category.items}
             filter={filter}
             isOpen={openCategoryIds.has(category.id)}
